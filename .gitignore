@@ -1,0 +1,22 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest & Test Reports
+.pytest_cache/
+reports/
+*.log
+
+# Sensitive Credentials
+testdata/login_data.json
+
+# Browser Profiles & Authentication States (Local sessions, cookies)
+.auth_profile/
+*.pma
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
