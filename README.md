@@ -166,6 +166,27 @@ steps:
 
 ---
 
+## ⚡ GitHub Actions CI/CD Integration
+
+The repository includes a ready-to-run GitHub Actions workflow located at [.github/workflows/playwright.yml](file:///c:/Saravanan%20Laptop/ChartApps/.github/workflows/playwright.yml).
+
+### Workflow Triggers
+- **Push / Pull Request**: Automatically executes on any push or PR to `main`.
+- **Manual Trigger (`workflow_dispatch`)**: Can be run manually at any time by clicking **"Run workflow"** under the **Actions** tab on GitHub.
+
+### How to Add Your Saved Session to GitHub Actions (Optional for CI)
+To allow tests to run authenticated in headless CI:
+1. Open `.auth_profile/storage_state.json` on your local machine and copy its entire JSON text.
+2. Go to your GitHub repository: **Settings $\to$ Secrets and variables $\to$ Actions**.
+3. Click **New repository secret**.
+4. Name: `AUTH_STORAGE_STATE`
+5. Value: *Paste the contents of `storage_state.json`*.
+6. Click **Add secret**.
+
+The workflow will automatically restore this session on the CI runner, run the regression tests, and upload `azure_test_report.html` and failure screenshots as workflow artifacts!
+
+---
+
 ## 🧩 Page Object Model (POM) Design Summary
 
 - **Separation of Concerns**: Locators (`locators/`) are separated from page actions (`pages/`), test data (`testdata/`), and test assertions (`tests/`).
