@@ -30,17 +30,20 @@ jobs:
 
       - name: Install Playwright Browsers
         run: |
-          playwright install chromium
+          playwright install --with-deps chromium
 
-      - name: Restore Auth Session State (Optional)
-        if: env.AUTH_STORAGE_STATE != ''
+      - name: Check & Restore Auth Session State
+        shell: pwsh
         env:
           AUTH_STORAGE_STATE: ${{ secrets.AUTH_STORAGE_STATE }}
-        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path ".auth_profile" | Out-Null
-          $env:AUTH_STORAGE_STATE | Out-File -FilePath ".auth_profile/storage_state.json" -Encoding utf8
-          Write-Host "Restored authentication storage state from GitHub Secrets."
+          if ($env:AUTH_STORAGE_STATE -and $env:AUTH_STORAGE_STATE.Trim() -ne "") {
+            New-Item -ItemType Directory -Force -Path ".auth_profile" | Out-Null
+            $env:AUTH_STORAGE_STATE | Out-File -FilePath ".auth_profile/storage_state.json" -Encoding utf8
+            Write-Host "SUCCESS: Restored authentication storage state from GitHub Secrets."
+          } else {
+            Write-Warning "NOTICE: Secret 'AUTH_STORAGE_STATE' is not set in GitHub repository settings. Tests requiring authentication will redirect to /dashboard/auth."
+          }
 
       - name: Execute Regression Tests
         shell: pwsh

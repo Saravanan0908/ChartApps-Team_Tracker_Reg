@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Optional, Tuple
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright
-from utils.config import CHANNEL, HEADLESS, SLOW_MO_MS, USER_DATA_DIR
+from utils.config import CHANNEL, HEADLESS, SLOW_MO_MS, USER_DATA_DIR, STORAGE_STATE_PATH
 
 
 def launch_persistent_browser(
@@ -33,6 +33,13 @@ def launch_persistent_browser(
         launch_kwargs["no_viewport"] = True
     if channel:
         launch_kwargs["channel"] = channel
+
+    # Load storage_state.json if present (crucial for CI environments)
+    storage_state_file = profile_dir / "storage_state.json"
+    if storage_state_file.exists():
+        launch_kwargs["storage_state"] = str(storage_state_file)
+    elif STORAGE_STATE_PATH.exists():
+        launch_kwargs["storage_state"] = str(STORAGE_STATE_PATH)
 
     context = playwright.chromium.launch_persistent_context(**launch_kwargs)
     page = context.pages[0] if context.pages else context.new_page()

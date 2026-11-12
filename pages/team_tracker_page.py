@@ -41,7 +41,6 @@ class TeamTrackerPage(BasePage):
 
     @property
     def submit_button(self) -> Locator:
-        # Match exact recorded name " Submit", regex pattern, or CSS selector
         return (
             self.page.get_by_role("button", name=TeamTrackerLocators.SUBMIT_BUTTON_EXACT_NAME)
             .or_(self.page.get_by_role("button", name=TeamTrackerLocators.SUBMIT_BUTTON_PATTERN))
@@ -62,8 +61,17 @@ class TeamTrackerPage(BasePage):
 
     # --- Actions ---
     def open_dashboard(self) -> None:
-        """Navigate directly to the ChartApps dashboard."""
+        """Navigate directly to the ChartApps dashboard and verify session."""
         self.navigate(AppUrls.DASHBOARD_URL)
+        self.page.wait_for_load_state("domcontentloaded")
+        
+        # Check if redirected to auth screen (unauthenticated session)
+        if "/auth" in self.page.url:
+            raise RuntimeError(
+                "Authentication required! The browser was redirected to '/dashboard/auth'. "
+                "In GitHub Actions, you must add the 'AUTH_STORAGE_STATE' repository secret "
+                "so the runner has the authenticated session. Locally, run 'tests/setup_auth.py'."
+            )
 
     def close_modal_if_present(self) -> None:
         """Dismiss any announcement or popup modal if present."""
@@ -94,7 +102,6 @@ class TeamTrackerPage(BasePage):
         selected_date = date_str or datetime.now().strftime("%Y-%m-%d")
         self.date_input.click()
 
-        # Attempt to click current date label in calendar popup if present
         current_day_label = datetime.now().strftime("%B %d,")
         try:
             day_cell = self.page.get_by_label(current_day_label)
@@ -103,10 +110,7 @@ class TeamTrackerPage(BasePage):
         except Exception:
             pass
 
-        # Fill date value directly to ensure exact match
         self.date_input.fill(selected_date)
-        
-        # Press Tab or Escape to ensure calendar overlay closes
         self.page.keyboard.press("Escape")
         return selected_date
 
@@ -126,14 +130,12 @@ class TeamTrackerPage(BasePage):
 
     def submit_form(self) -> None:
         """Click the Submit button with robust scroll and overlay-bypassing handling."""
-        # Close any lingering popups or overlays before clicking
         self.page.keyboard.press("Escape")
 
         btn = self.submit_button.first
         btn.scroll_into_view_if_needed()
         btn.wait_for(state="visible", timeout=10000)
 
-        # Attempt normal click, with automatic fallback to force-click if obscured
         try:
             btn.click(timeout=5000)
         except Exception:
