@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [ main ]
   schedule:
-    # 1. Custom test run: Today only (Nov 19) at 12:00 PM IST (06:30 UTC)
-    - cron: '30 6 19 11 *'
+    # 1. Custom test run: Today only (Nov 19) at 12:45 PM IST (07:15 UTC)
+    - cron: '15 7 19 11 *'
     # 2. Daily recurring run: Every day at 11:00 AM IST (05:30 UTC)
     - cron: '30 5 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI
