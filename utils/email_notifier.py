@@ -271,11 +271,15 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") ->
 def send_notification() -> None:
     """Main dispatch function to assemble and send email."""
     # Read SMTP credentials
-    smtp_user = os.environ.get("EMAIL_USERNAME") or os.environ.get("SMTP_USER")
-    smtp_pass = os.environ.get("EMAIL_PASSWORD") or os.environ.get("SMTP_PASS")
+    smtp_user = os.environ.get("EMAIL_USERNAME") or os.environ.get("SMTP_USER") or ""
+    smtp_pass = os.environ.get("EMAIL_PASSWORD") or os.environ.get("SMTP_PASS") or ""
     email_to = os.environ.get("EMAIL_TO") or smtp_user
-    smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_server = os.environ.get("SMTP_SERVER") or "smtp.gmail.com"
+    raw_port = os.environ.get("SMTP_PORT") or "587"
+    try:
+        smtp_port = int(raw_port)
+    except Exception:
+        smtp_port = 587
 
     results = parse_test_results()
     git_info = get_git_info()
