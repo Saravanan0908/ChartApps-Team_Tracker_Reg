@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  schedule:
+    # Auto-run daily at 11:00 AM IST (05:30 UTC)
+    - cron: '30 5 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
@@ -50,8 +53,9 @@ jobs:
         env:
           CHARTAPPS_EMAIL: ${{ secrets.CHARTAPPS_EMAIL }}
           CHARTAPPS_PASSWORD: ${{ secrets.CHARTAPPS_PASSWORD }}
+          PYTHONUNBUFFERED: "1"
         run: |
-          pytest -m regression --html=reports/azure_test_report.html --self-contained-html --junitxml=reports/junit_report.xml
+          pytest -m regression -s -v --html=reports/azure_test_report.html --self-contained-html --junitxml=reports/junit_report.xml
 
       - name: Publish Test Report & Failure Screenshots
         uses: actions/upload-artifact@v4
