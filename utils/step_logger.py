@@ -44,7 +44,9 @@ class StepLogger:
         self.steps_record.append((step_num, error_msg, "FAILED"))
 
     def finish_suite(self) -> None:
-        """Print completion banner and write to GitHub Step Summary if in CI."""
+        """Print completion banner, save step execution json, and write to GitHub Step Summary if in CI."""
+        import json
+        from pathlib import Path
         elapsed = round(time.time() - self._start_time, 2)
         failed_count = sum(1 for _, _, status in self.steps_record if status == "FAILED")
         passed_count = sum(1 for _, _, status in self.steps_record if status == "PASSED")
@@ -53,6 +55,25 @@ class StepLogger:
         print(f"🏁 TEST SUITE COMPLETED: {self.suite_name}", flush=True)
         print(f"📊 Summary: {passed_count} Passed | {failed_count} Failed | Elapsed: {elapsed}s", flush=True)
         print(f"{'=' * 75}\n", flush=True)
+
+        # Save step execution record to json for email notification
+        try:
+            reports_dir = Path("reports")
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            with open(reports_dir / "step_execution.json", "w", encoding="utf-8") as f:
+                json.dump({
+                    "suite": self.suite_name,
+                    "total_steps": self.total_steps,
+                    "elapsed": elapsed,
+                    "passed_count": passed_count,
+                    "failed_count": failed_count,
+                    "steps": [
+                        {"step": s[0], "desc": s[1], "status": s[2]}
+                        for s in self.steps_record
+                    ]
+                }, f, indent=2)
+        except Exception as e:
+            print(f"[WARNING] Could not save step_execution.json: {e}", flush=True)
 
         self._write_github_summary(elapsed, passed_count, failed_count)
 

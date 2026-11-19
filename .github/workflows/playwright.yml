@@ -69,3 +69,15 @@ jobs:
             reports/junit_report.xml
             reports/screenshots/
           retention-days: 14
+
+      - name: Send Email Notification (Pass/Fail Status & Screenshot)
+        if: always()
+        shell: pwsh
+        env:
+          EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+        run: |
+          python utils/email_notifier.py
