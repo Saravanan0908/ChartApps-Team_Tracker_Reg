@@ -12,6 +12,7 @@ class TeamTrackerLocators:
 
     # Form Fields
     DATE_PICKER_INPUT = re.compile(r"yyyy-mm-dd", re.IGNORECASE)
+    DATE_PICKER_CSS = "input.flatpickr-input, input[placeholder*='yyyy-mm-dd'], input[name='Date']"
     DROPDOWN_PLACEHOLDER = "Select an option..."
     OPTION_ROLE = "option"
     DEFAULT_OPTION_NAME = "FN"

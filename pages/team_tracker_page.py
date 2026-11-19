@@ -50,7 +50,11 @@ class TeamTrackerPage(BasePage):
     @property
     def date_input(self) -> Locator:
         """Locator for the Date picker input field."""
-        return self.page.get_by_role("textbox", name=TeamTrackerLocators.DATE_PICKER_INPUT)
+        return (
+            self.page.locator(TeamTrackerLocators.DATE_PICKER_CSS)
+            .or_(self.page.get_by_role("textbox", name=TeamTrackerLocators.DATE_PICKER_INPUT))
+            .first
+        )
 
     @property
     def dropdown_trigger(self) -> Locator:
@@ -203,13 +207,15 @@ class TeamTrackerPage(BasePage):
         try:
             if card_locator.is_visible(timeout=5000):
                 card_locator.get_by_role("button", name=TeamTrackerLocators.VIEW_BUTTON).click()
-                return
+            else:
+                self.page.get_by_role("button", name=TeamTrackerLocators.VIEW_BUTTON).first.click()
         except Exception:
-            pass
-        # Fallback to any visible 'View' button
-        view_btn = self.page.get_by_role("button", name=TeamTrackerLocators.VIEW_BUTTON).first
-        view_btn.wait_for(state="visible", timeout=15000)
-        view_btn.click()
+            view_btn = self.page.get_by_role("button", name=TeamTrackerLocators.VIEW_BUTTON).first
+            view_btn.wait_for(state="visible", timeout=15000)
+            view_btn.click()
+
+        # Crucial: Allow SPA component mounting and flatpickr widget initialization to stabilize
+        self.page.wait_for_timeout(2500)
 
     def select_date(self, date_str: Optional[str] = None) -> str:
         """Select a date in the datepicker input using YYYY-MM-DD format.
@@ -221,9 +227,20 @@ class TeamTrackerPage(BasePage):
             str: The selected date string in YYYY-MM-DD format.
         """
         selected_date = date_str or datetime.now().strftime("%Y-%m-%d")
-        self.date_input.click()
 
-        # Attempt to click current day cell in PrimeReact calendar overlay
+        # Wait for the date input to be attached and visible in the DOM
+        date_el = self.date_input
+        date_el.wait_for(state="visible", timeout=15000)
+
+        # Attempt standard click, falling back to force click if flatpickr re-mounted the node
+        try:
+            date_el.click(timeout=5000)
+        except Exception:
+            self.page.wait_for_timeout(1000)
+            date_el = self.date_input
+            date_el.click(force=True)
+
+        # Attempt to click current day cell in calendar overlay if visible
         current_day_label = datetime.now().strftime("%B %d,")
         try:
             day_cell = self.page.get_by_label(current_day_label)
@@ -232,9 +249,25 @@ class TeamTrackerPage(BasePage):
         except Exception:
             pass
 
-        # Fill date input and press Escape to dismiss the popup calendar
-        self.date_input.fill(selected_date)
+        # Fill date input; if readonly attribute is enforced by flatpickr, set value via DOM
+        try:
+            date_el.fill(selected_date)
+        except Exception:
+            self.page.evaluate(
+                """([sel, val]) => {
+                    const el = document.querySelector(sel);
+                    if (el) {
+                        el.value = val;
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                    }
+                }""",
+                ["input.flatpickr-input, input[placeholder*='yyyy-mm-dd'], input[name='Date']", selected_date]
+            )
+
+        # Dismiss calendar popups
         self.page.keyboard.press("Escape")
+        self.page.wait_for_timeout(500)
         return selected_date
 
     def select_option(self, option_name: str = TeamTrackerLocators.DEFAULT_OPTION_NAME) -> None:
