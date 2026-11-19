@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from pages.team_tracker_page import TeamTrackerPage
 from testdata.team_tracker_data import TeamTrackerTestData
 from utils.browser_factory import launch_persistent_browser
-from utils.config import USER_DATA_DIR
+from utils.config import HEADLESS, USER_DATA_DIR
 
 
 @pytest.mark.regression
@@ -81,26 +81,20 @@ def test_form_submission_and_data_stored(persistent_page: Page) -> None:
 
 
 def run_standalone() -> None:
-    """Run directly from command line with persistent session and keep browser open."""
+    """Run directly from command line in headless mode and exit automatically."""
     print("=" * 65)
-    print("Running Regression Test: Form Submission & Data Stored...")
+    print(f"Running Regression Test (Headless: {HEADLESS})...")
     print("=" * 65)
 
     with sync_playwright() as playwright:
         context, page = launch_persistent_browser(
             playwright,
             user_data_dir=USER_DATA_DIR,
-            headless=False,
+            headless=HEADLESS,
         )
         try:
             test_form_submission_and_data_stored(page)
             print("\n[SUCCESS] Regression Test Completed Successfully!")
-            
-            # Keep browser open for inspection
-            print("\n" + "=" * 65)
-            print("Browser will remain open. Press Enter in this terminal to exit...")
-            print("=" * 65)
-            input()
         except Exception as e:
             print(f"\n[FAILURE] Regression test failed: {e}")
             reports_dir = Path("reports/screenshots")

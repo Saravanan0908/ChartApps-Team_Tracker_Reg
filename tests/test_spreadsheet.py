@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pages.spreadsheet_page import SpreadsheetPage
 from utils.browser_factory import launch_persistent_browser
-from utils.config import USER_DATA_DIR
+from utils.config import HEADLESS, USER_DATA_DIR
 
 
 def test_spreadsheet_operations_with_saved_session(persistent_page: Page) -> None:
@@ -41,16 +41,16 @@ def test_spreadsheet_operations_with_saved_session(persistent_page: Page) -> Non
 
 
 def run_standalone() -> None:
-    """Run directly from command line."""
+    """Run directly from command line in headless mode and exit automatically."""
     print("=" * 60)
-    print("Running automated spreadsheet test using retained session...")
+    print(f"Running automated spreadsheet test (Headless: {HEADLESS})...")
     print("=" * 60)
 
     with sync_playwright() as playwright:
         context, page = launch_persistent_browser(
             playwright,
             user_data_dir=USER_DATA_DIR,
-            headless=False,
+            headless=HEADLESS,
         )
         try:
             spreadsheet_page = SpreadsheetPage(page)
@@ -60,13 +60,6 @@ def run_standalone() -> None:
             is_valid = spreadsheet_page.validate_spreadsheet_operations()
             assert is_valid, "Spreadsheet container/dashboard should be rendered and accessible"
             print("[PASS] Spreadsheet operations validated successfully with retained Google session!")
-            
-            # Keep browser open after completion
-            print("\n" + "=" * 65)
-            print("[SUCCESS] All steps completed! The browser will remain open.")
-            print("Press Enter in this terminal whenever you want to close it...")
-            print("=" * 65)
-            input()
         except Exception as e:
             print(f"\n[FAILURE] Test failed: {e}")
             reports_dir = Path("reports/screenshots")

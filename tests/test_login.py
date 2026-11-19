@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from pages.login_page import LoginPage
 from testdata.test_data import LoginTestData
 from utils.browser_factory import create_browser_and_page
+from utils.config import HEADLESS
 
 
 def test_google_login(page: Page) -> None:
@@ -36,17 +37,10 @@ def test_google_login(page: Page) -> None:
 def run_standalone() -> None:
     """Standalone runner equivalent to the original Playwright script."""
     with sync_playwright() as playwright:
-        browser, context, page = create_browser_and_page(playwright, headless=False)
+        browser, context, page = create_browser_and_page(playwright, headless=HEADLESS)
         try:
             test_google_login(page)
-
-            # ---------------------
-            # Keep browser open after all steps are complete
-            print("\n" + "=" * 65)
-            print("[SUCCESS] All steps completed! The browser will remain open.")
-            print("Press Enter in this terminal whenever you want to close it...")
-            print("=" * 65)
-            input()
+            print("\n[SUCCESS] Login test completed successfully!")
         except Exception as e:
             print(f"\n[FAILURE] Login test failed: {e}")
             reports_dir = Path("reports/screenshots")
@@ -62,6 +56,9 @@ def run_standalone() -> None:
                 print(f"[INFO] Opening report: {report_path}")
                 webbrowser.open(report_path.as_uri())
             raise e
+        finally:
+            context.close()
+            browser.close()
 
 
 if __name__ == "__main__":
