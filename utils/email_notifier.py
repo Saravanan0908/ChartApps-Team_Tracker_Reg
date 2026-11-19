@@ -287,8 +287,8 @@ def send_notification() -> None:
     subject = f"{subject_icon} [{subject_status}] ChartApps Regression Suite Run - {git_info['branch']} ({results['duration']}s)"
 
     print("=" * 65)
-    print(f"📧 Test Result Status: {subject_status}")
-    print(f"📧 Found {len(screenshots)} failure screenshot(s)")
+    print(f"[EMAIL] Test Result Status: {subject_status}")
+    print(f"[EMAIL] Found {len(screenshots)} failure screenshot(s)")
     print("=" * 65)
 
     if not smtp_user or not smtp_pass:

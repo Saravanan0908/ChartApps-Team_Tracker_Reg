@@ -5,6 +5,31 @@ import sys
 import time
 from datetime import datetime
 
+# Reconfigure stdout/stderr to UTF-8 to prevent cp1252 UnicodeEncodeError on Windows CI
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+
+def safe_print(*args, **kwargs):
+    """Print to console with encoding fallback for Windows code pages."""
+    try:
+        print(*args, **kwargs)
+    except UnicodeEncodeError:
+        try:
+            encoding = getattr(sys.stdout, "encoding", "ascii") or "ascii"
+            clean_args = [
+                str(arg).encode(encoding, errors="replace").decode(encoding)
+                for arg in args
+            ]
+            print(*clean_args, **kwargs)
+        except Exception:
+            pass
+
 
 class StepLogger:
     """Logs clear, real-time step indicators to stdout and appends to GitHub Step Summary."""
@@ -17,30 +42,30 @@ class StepLogger:
 
     def start_suite(self) -> None:
         """Print suite banner at start."""
-        print(f"\n{'=' * 75}", flush=True)
-        print(f"🚀 STARTING TEST SUITE: {self.suite_name} ({self.total_steps} Total Steps)", flush=True)
-        print(f"🕒 Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
-        print(f"{'=' * 75}\n", flush=True)
+        safe_print(f"\n{'=' * 75}", flush=True)
+        safe_print(f"[START] STARTING TEST SUITE: {self.suite_name} ({self.total_steps} Total Steps)", flush=True)
+        safe_print(f"[TIME]  Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+        safe_print(f"{'=' * 75}\n", flush=True)
 
     def step(self, step_num: int, title: str, details: str = "") -> None:
         """Log the start of a test step."""
         now_str = datetime.now().strftime("%H:%M:%S")
-        prefix = f"[{now_str}] 🔵 [STEP {step_num:02d}/{self.total_steps:02d}]"
-        print(f"\n{prefix} ▶ {title}", flush=True)
+        prefix = f"[{now_str}] >> [STEP {step_num:02d}/{self.total_steps:02d}]"
+        safe_print(f"\n{prefix} {title}", flush=True)
         if details:
-            print(f"               └─ {details}", flush=True)
+            safe_print(f"               * {details}", flush=True)
 
     def passed(self, step_num: int, message: str = "") -> None:
         """Log the successful completion of a test step."""
         now_str = datetime.now().strftime("%H:%M:%S")
         msg = f" - {message}" if message else ""
-        print(f"[{now_str}] 🟢 [STEP {step_num:02d}/{self.total_steps:02d}] ✔ PASSED{msg}", flush=True)
+        safe_print(f"[{now_str}] [PASS] [STEP {step_num:02d}/{self.total_steps:02d}]{msg}", flush=True)
         self.steps_record.append((step_num, message or f"Step {step_num} completed", "PASSED"))
 
     def failed(self, step_num: int, error_msg: str = "") -> None:
         """Log the failure of a test step."""
         now_str = datetime.now().strftime("%H:%M:%S")
-        print(f"[{now_str}] 🔴 [STEP {step_num:02d}/{self.total_steps:02d}] ✖ FAILED: {error_msg}", flush=True)
+        safe_print(f"[{now_str}] [FAIL] [STEP {step_num:02d}/{self.total_steps:02d}] FAILED: {error_msg}", flush=True)
         self.steps_record.append((step_num, error_msg, "FAILED"))
 
     def finish_suite(self) -> None:
@@ -51,10 +76,10 @@ class StepLogger:
         failed_count = sum(1 for _, _, status in self.steps_record if status == "FAILED")
         passed_count = sum(1 for _, _, status in self.steps_record if status == "PASSED")
 
-        print(f"\n{'=' * 75}", flush=True)
-        print(f"🏁 TEST SUITE COMPLETED: {self.suite_name}", flush=True)
-        print(f"📊 Summary: {passed_count} Passed | {failed_count} Failed | Elapsed: {elapsed}s", flush=True)
-        print(f"{'=' * 75}\n", flush=True)
+        safe_print(f"\n{'=' * 75}", flush=True)
+        safe_print(f"[FINISH] TEST SUITE COMPLETED: {self.suite_name}", flush=True)
+        safe_print(f"[SUMMARY] {passed_count} Passed | {failed_count} Failed | Elapsed: {elapsed}s", flush=True)
+        safe_print(f"{'=' * 75}\n", flush=True)
 
         # Save step execution record to json for email notification
         try:
@@ -73,7 +98,7 @@ class StepLogger:
                     ]
                 }, f, indent=2)
         except Exception as e:
-            print(f"[WARNING] Could not save step_execution.json: {e}", flush=True)
+            safe_print(f"[WARNING] Could not save step_execution.json: {e}", flush=True)
 
         self._write_github_summary(elapsed, passed_count, failed_count)
 
@@ -109,4 +134,4 @@ class StepLogger:
             with open(summary_file, "a", encoding="utf-8") as f:
                 f.write("\n".join(lines) + "\n")
         except Exception as e:
-            print(f"[WARNING] Could not write to GITHUB_STEP_SUMMARY: {e}", flush=True)
+            safe_print(f"[WARNING] Could not write to GITHUB_STEP_SUMMARY: {e}", flush=True)

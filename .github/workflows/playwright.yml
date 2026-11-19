@@ -56,6 +56,7 @@ jobs:
           CHARTAPPS_EMAIL: ${{ secrets.CHARTAPPS_EMAIL }}
           CHARTAPPS_PASSWORD: ${{ secrets.CHARTAPPS_PASSWORD }}
           PYTHONUNBUFFERED: "1"
+          PYTHONIOENCODING: "utf-8"
         run: |
           pytest -m regression -s -v --html=reports/azure_test_report.html --self-contained-html --junitxml=reports/junit_report.xml
 
@@ -79,5 +80,7 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          PYTHONUNBUFFERED: "1"
+          PYTHONIOENCODING: "utf-8"
         run: |
           python utils/email_notifier.py
