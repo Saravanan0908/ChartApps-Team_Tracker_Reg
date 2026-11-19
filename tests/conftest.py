@@ -88,6 +88,8 @@ def pytest_sessionfinish(session, exitstatus):
             print(f"[INFO] Automatically opening Azure HTML Report: {report_path}")
             print("=" * 70)
             try:
-                webbrowser.open(report_path.as_uri())
+                import os
+                if not os.environ.get("CI"):
+                    webbrowser.open(report_path.as_uri())
             except Exception as e:
                 print(f"[WARNING] Could not automatically open browser: {e}")

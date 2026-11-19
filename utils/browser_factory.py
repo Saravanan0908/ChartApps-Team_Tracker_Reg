@@ -32,6 +32,8 @@ def launch_persistent_browser(
     if not headless:
         launch_kwargs["args"].append("--start-maximized")
         launch_kwargs["no_viewport"] = True
+    else:
+        launch_kwargs["viewport"] = {"width": 1920, "height": 1080}
     if channel:
         launch_kwargs["channel"] = channel
 

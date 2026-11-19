@@ -37,16 +37,19 @@ jobs:
         env:
           AUTH_STORAGE_STATE: ${{ secrets.AUTH_STORAGE_STATE }}
         run: |
+          New-Item -ItemType Directory -Force -Path ".auth_profile" | Out-Null
           if ($env:AUTH_STORAGE_STATE -and $env:AUTH_STORAGE_STATE.Trim() -ne "") {
-            New-Item -ItemType Directory -Force -Path ".auth_profile" | Out-Null
             $env:AUTH_STORAGE_STATE | Out-File -FilePath ".auth_profile/storage_state.json" -Encoding utf8
             Write-Host "SUCCESS: Restored authentication storage state from GitHub Secrets."
           } else {
-            Write-Warning "NOTICE: Secret 'AUTH_STORAGE_STATE' is not set in GitHub repository settings. Tests requiring authentication will redirect to /dashboard/auth."
+            Write-Host "NOTICE: Running with automated fallback credentials."
           }
 
       - name: Execute Regression Tests
         shell: pwsh
+        env:
+          CHARTAPPS_EMAIL: ${{ secrets.CHARTAPPS_EMAIL }}
+          CHARTAPPS_PASSWORD: ${{ secrets.CHARTAPPS_PASSWORD }}
         run: |
           pytest -m regression --html=reports/azure_test_report.html --self-contained-html --junitxml=reports/junit_report.xml
 

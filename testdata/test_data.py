@@ -1,5 +1,6 @@
 """Test data definitions for login tests."""
 
+import os
 import json
 from pathlib import Path
 
@@ -21,5 +22,5 @@ _user = _json_data.get("user", {})
 
 class LoginTestData:
     """Provides test credentials for authentication test cases."""
-    EMAIL: str = _user.get("email", "your_email@gmail.com")
-    PASSWORD: str = _user.get("password", "your_password")
+    EMAIL: str = os.environ.get("CHARTAPPS_EMAIL") or _user.get("email") or "chartapps.com@gmail.com"
+    PASSWORD: str = os.environ.get("CHARTAPPS_PASSWORD") or _user.get("password") or "YellowBr!ck!23"

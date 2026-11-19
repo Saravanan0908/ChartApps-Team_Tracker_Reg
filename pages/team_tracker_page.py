@@ -61,41 +61,97 @@ class TeamTrackerPage(BasePage):
 
     # --- Actions ---
     def open_dashboard(self) -> None:
-        """Navigate directly to the ChartApps dashboard and verify session."""
+        """Navigate directly to the ChartApps dashboard and authenticate automatically if needed."""
         self.navigate(AppUrls.DASHBOARD_URL)
         self.page.wait_for_load_state("domcontentloaded")
-        
-        # Check if redirected to auth screen (unauthenticated session)
-        if "/auth" in self.page.url:
-            raise RuntimeError(
-                "Authentication required! The browser was redirected to '/dashboard/auth'. "
-                "In GitHub Actions, you must add the 'AUTH_STORAGE_STATE' repository secret "
-                "so the runner has the authenticated session. Locally, run 'tests/setup_auth.py'."
-            )
+
+        # Indicators for dashboard vs login form
+        email_loc = self.page.locator('input[type="email"], input[placeholder*="Email"]').first
+        dashboard_indicator = (
+            self.page.get_by_text("My Apps")
+            .or_(self.page.get_by_role("link", name=TeamTrackerLocators.TEAM_TRACKER_LINK))
+            .or_(self.close_modal_button)
+        )
+
+        # Give React SPA up to 20 seconds to initialize and display dashboard or login
+        for _ in range(20):
+            try:
+                if dashboard_indicator.first.is_visible():
+                    print("[INFO] Authenticated dashboard detected.")
+                    return
+                if email_loc.is_visible():
+                    break
+            except Exception:
+                pass
+            self.page.wait_for_timeout(1000)
+
+        # Perform automated login if login form is detected
+        try:
+            if email_loc.is_visible():
+                print("[INFO] Unauthenticated session detected. Performing automated login...")
+                from testdata.test_data import LoginTestData
+                email_loc.fill(LoginTestData.EMAIL)
+                password_loc = self.page.locator('input[type="password"], input[placeholder*="Password"]').first
+                password_loc.fill(LoginTestData.PASSWORD)
+                
+                sign_in_btn = self.page.get_by_role("button", name="Sign In", exact=True)
+                sign_in_btn.click()
+                print("[INFO] Clicked Sign In button, waiting for dashboard...")
+
+                # Wait for dashboard to render post-login
+                self.page.wait_for_timeout(3000)
+                try:
+                    dashboard_indicator.first.wait_for(state="visible", timeout=20000)
+                    print("[INFO] Successfully reached authenticated dashboard.")
+                except Exception:
+                    pass
+
+                # Save authenticated state for future test cases in session
+                try:
+                    from utils.config import STORAGE_STATE_PATH
+                    STORAGE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                    self.page.context.storage_state(path=str(STORAGE_STATE_PATH))
+                    print(f"[INFO] Saved authenticated session to: {STORAGE_STATE_PATH}")
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[WARNING] Auto-login check encountered error: {e}")
 
     def close_modal_if_present(self) -> None:
         """Dismiss any announcement or popup modal if present."""
         try:
-            if self.close_modal_button.first.is_visible(timeout=4000):
-                self.close_modal_button.first.click()
+            btn = self.close_modal_button.first
+            if btn.is_visible(timeout=5000):
+                btn.click()
+                self.page.wait_for_timeout(500)
         except Exception:
             pass
 
     def navigate_to_team_tracker(self) -> None:
-        """Click on the Team Tracker navigation link."""
+        """Click on the Team Tracker navigation link (reveals via My Apps if needed)."""
+        try:
+            my_apps = self.page.get_by_text("My Apps")
+            if my_apps.is_visible(timeout=5000):
+                my_apps.click()
+                self.page.wait_for_timeout(1000)
+        except Exception:
+            pass
+        self.team_tracker_link.first.wait_for(state="visible", timeout=15000)
         self.team_tracker_link.first.click()
 
     def open_tracker_view(self, tracker_id: str = TeamTrackerLocators.DEFAULT_TRACKER_CARD_ID) -> None:
         """Open the specific tracker view by ID or fallback to the first view button."""
         card_locator = self.page.locator(f'[id="{tracker_id}"]')
         try:
-            if card_locator.is_visible(timeout=3000):
+            if card_locator.is_visible(timeout=5000):
                 card_locator.get_by_role("button", name=TeamTrackerLocators.VIEW_BUTTON).click()
                 return
         except Exception:
             pass
         # Fallback to any visible view button
-        self.page.get_by_role("button", name=TeamTrackerLocators.VIEW_BUTTON).first.click()
+        view_btn = self.page.get_by_role("button", name=TeamTrackerLocators.VIEW_BUTTON).first
+        view_btn.wait_for(state="visible", timeout=15000)
+        view_btn.click()
 
     def select_date(self, date_str: Optional[str] = None) -> str:
         """Select current date in YYYY-MM-DD format using input click and fill."""
