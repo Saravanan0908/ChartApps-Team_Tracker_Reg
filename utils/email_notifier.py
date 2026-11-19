@@ -273,7 +273,7 @@ def send_notification() -> None:
     # Read SMTP credentials
     smtp_user = os.environ.get("EMAIL_USERNAME") or os.environ.get("SMTP_USER") or ""
     smtp_pass = os.environ.get("EMAIL_PASSWORD") or os.environ.get("SMTP_PASS") or ""
-    email_to = os.environ.get("EMAIL_TO") or smtp_user
+    email_to = os.environ.get("EMAIL_TO") or "saravanans@objectways.com"
     smtp_server = os.environ.get("SMTP_SERVER") or "smtp.gmail.com"
     raw_port = os.environ.get("SMTP_PORT") or "587"
     try:
