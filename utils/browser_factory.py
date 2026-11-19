@@ -1,5 +1,6 @@
 """Browser factory for launching Playwright with persistent context and anti-detection settings."""
 
+import json
 from pathlib import Path
 from typing import Optional, Tuple
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright
@@ -34,14 +35,23 @@ def launch_persistent_browser(
     if channel:
         launch_kwargs["channel"] = channel
 
-    # Load storage_state.json if present (crucial for CI environments)
-    storage_state_file = profile_dir / "storage_state.json"
-    if storage_state_file.exists():
-        launch_kwargs["storage_state"] = str(storage_state_file)
-    elif STORAGE_STATE_PATH.exists():
-        launch_kwargs["storage_state"] = str(STORAGE_STATE_PATH)
-
+    # Note: launch_persistent_context does not take 'storage_state' as a parameter;
+    # it uses the SQLite database in user_data_dir.
     context = playwright.chromium.launch_persistent_context(**launch_kwargs)
+
+    # Inject saved cookies from storage_state.json if available
+    storage_state_file = profile_dir / "storage_state.json"
+    target_state = storage_state_file if storage_state_file.exists() else (STORAGE_STATE_PATH if STORAGE_STATE_PATH.exists() else None)
+    if target_state:
+        try:
+            with open(target_state, "r", encoding="utf-8") as f:
+                state_data = json.load(f)
+                cookies = state_data.get("cookies", [])
+                if cookies:
+                    context.add_cookies(cookies)
+        except Exception as e:
+            print(f"[WARNING] Could not load cookies from {target_state}: {e}")
+
     page = context.pages[0] if context.pages else context.new_page()
     return context, page
 
