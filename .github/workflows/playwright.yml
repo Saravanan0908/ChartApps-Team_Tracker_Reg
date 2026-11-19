@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [ main ]
   schedule:
-    # 1. Verification auto-run: triggers automatically every 10 minutes to verify auto-schedule
-    - cron: '*/10 * * * *'
+    # 1. Scheduled auto test run for today at 5:00 PM IST (11:30 UTC)
+    - cron: '30 11 * * *'
     # 2. Daily recurring run: Every day at 11:00 AM IST (05:30 UTC)
     - cron: '30 5 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub UI
