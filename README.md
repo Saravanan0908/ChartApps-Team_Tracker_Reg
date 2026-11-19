@@ -1,196 +1,135 @@
 # ChartApps Playwright Automation Framework (POM)
 
-A robust, enterprise-grade test automation framework built with **Python**, **Playwright**, and **Pytest** following the **Page Object Model (POM)** design pattern. It includes Google OAuth bot-detection bypass, dynamic runtime test data, scenario-level failure capture, and **Azure DevOps HTML & JUnit reporting**.
+An enterprise-grade, clean Page Object Model (POM) test automation framework built with **Python**, **Playwright**, and **Pytest**. Features automated session management, dynamic runtime test data, real-time live step streaming, failure screenshot capture, Azure-compatible HTML reporting, and a full GitHub Actions CI/CD pipeline with scheduled auto-execution and email notifications.
 
 ---
 
-## 📁 Project Architecture
+## 📁 Clean Project Architecture
 
 ```plaintext
 ChartApps/
-├── constants/                         # Application routes and global constants
-│   ├── urls.py                        # Base URLs, auth, and dashboard routes
+├── .github/
+│   └── workflows/
+│       └── playwright.yml             # GitHub Actions CI/CD (push, PR, cron schedules & manual triggers)
+├── constants/
+│   ├── urls.py                        # Centralized URLs (Base URL, Dashboard, Auth)
 │   └── __init__.py
-├── locators/                          # UI element locators separated from page logic
-│   ├── login_locators.py              # Login & Google OAuth locators
+├── locators/                          # Pure selector definitions (Decoupled from test logic)
+│   ├── login_locators.py              # Login & authentication locators
 │   ├── spreadsheet_locators.py        # Dashboard & spreadsheet element locators
-│   ├── team_tracker_locators.py       # Team Tracker form, inputs, toast & table locators
+│   ├── team_tracker_locators.py       # Team Tracker form, inputs, toast, and table locators
 │   └── __init__.py
-├── pages/                             # Page Object Model action classes
-│   ├── base_page.py                   # Common Playwright interactions (navigate, url, title)
-│   ├── login_page.py                  # Login actions, Google auth & completion detection
-│   ├── spreadsheet_page.py            # Spreadsheet views, table validation, and session checks
-│   ├── team_tracker_page.py           # Team Tracker form submission, datepicker & table verify
+├── pages/                             # Page Object Model Action Classes
+│   ├── base_page.py                   # Common Playwright actions (navigate, title, wait, screenshot)
+│   ├── login_page.py                  # Login actions and auth completion flows
+│   ├── spreadsheet_page.py            # Spreadsheet views and table validations
+│   ├── team_tracker_page.py           # Team Tracker actions (auto-login, form submit, datepicker, table verify)
 │   └── __init__.py
-├── testdata/                          # Test datasets and dynamic generators
-│   ├── login_data.json                # User credentials configuration
-│   ├── test_data.py                   # Data loader for login tests
-│   ├── team_tracker_data.py           # Dynamic current date (YYYY-MM-DD) and run time generator
+├── testdata/                          # Test Datasets & Dynamic Generators
+│   ├── team_tracker_data.py           # Dynamic date (YYYY-MM-DD) and runtime (HH:MM:SS) generator
+│   ├── test_data.py                   # Credential provider (Environment vars -> JSON -> Fallbacks)
+│   ├── login_data.example.json        # Example credentials template
+│   ├── login_data.json                # Local test credentials (gitignored)
 │   └── __init__.py
-├── utils/                             # Shared utilities and browser context management
-│   ├── browser_factory.py             # Persistent Chrome launcher with anti-detection flags
-│   ├── config.py                      # Global timeout, channel, and profile directory configs
+├── tests/                             # Pytest Test Suites & Fixtures
+│   ├── conftest.py                    # Browser fixtures, failure screenshot capture & Azure report hooks
+│   ├── setup_auth.py                  # One-time interactive Google login setup utility
+│   ├── test_login.py                  # Standalone login verification test
+│   ├── test_spreadsheet.py            # Spreadsheet view and session persistence test
+│   ├── test_team_tracker_regression.py# Regression suite: Form Submission & Spreadsheet Data Verification
 │   └── __init__.py
-├── tests/                             # Test suites and fixtures
-│   ├── conftest.py                    # Pytest fixtures + automatic failure screenshot hook
-│   ├── setup_auth.py                  # One-time Google login setup script
-│   ├── test_login.py                  # Google login flow test
-│   ├── test_spreadsheet.py            # Session reuse & spreadsheet validation test
-│   ├── test_team_tracker_regression.py # Regression test for Form Submission & Data Stored
+├── utils/                             # Shared Framework Utilities
+│   ├── browser_factory.py             # Browser launcher with persistent contexts & anti-detection args
+│   ├── config.py                      # Global runner settings (timeouts, headless toggle, profile paths)
+│   ├── email_notifier.py              # HTML email notifier with Pass/Fail status and failure screenshot
+│   ├── export_session.py              # Utility to export browser session to storage_state.json for CI
+│   ├── step_logger.py                 # Real-time console step logger and GitHub Step Summary generator
 │   └── __init__.py
-├── reports/                           # Test execution reports and screenshots (auto-generated)
-│   ├── azure_test_report.html         # Self-contained Azure-ready HTML dashboard
-│   ├── junit_report.xml               # JUnit XML for Azure DevOps PublishTestResults task
-│   └── screenshots/                   # Scenario-level screenshots captured upon test failure
-├── .auth_profile/                     # Persistent Chrome profile retaining Google authentication
-├── pytest.ini                         # Pytest configuration with Azure reporting & markers
-├── record.py                          # Codegen runner with Google Anti-Bot bypass
-├── start_login.bat                    # One-click native Chrome launcher for manual login
-├── record_codegen.bat                 # One-click Playwright Codegen attacher (port 9222)
+├── reports/                           # Test Reports & Execution Artifacts (Generated automatically)
+│   ├── azure_test_report.html         # Self-contained Azure DevOps / CI HTML test report
+│   ├── junit_report.xml               # JUnit XML report for test run analytics
+│   ├── step_execution.json            # Machine-readable step-by-step test execution record
+│   └── screenshots/                   # Screenshots captured automatically on test failure
+├── pytest.ini                         # Pytest configuration with test paths, markers & reporting options
 ├── requirements.txt                   # Framework dependencies
-└── README.md                          # Comprehensive documentation
+└── README.md                          # Framework documentation
 ```
 
 ---
 
-## 🚀 Quick Start Guide
+## 🌟 Key Features & Design Principles
 
-### 1. Prerequisites & Installation
-Ensure you have Python 3.10+ and Google Chrome installed. Install dependencies:
+### 1. Page Object Model (POM) Design Pattern
+- **Decoupled Responsibilities:**
+  - `locators/` defines *where* elements are.
+  - `pages/` defines *how* elements interact.
+  - `tests/` defines *what* business scenarios to validate.
+- **Easy to Understand:** Every function includes comprehensive docstrings, parameter definitions, and step-by-step inline explanations.
+
+### 2. Automated Session & Fallback Authentication
+- Cloud CI runners (like GitHub Actions) start fresh without browser cookies.
+- When `open_dashboard()` detects an unauthenticated session, it automatically fills credentials from `testdata/test_data.py`, signs in, and caches the session state for the rest of the test execution.
+
+### 3. Dynamic Test Data Generation
+- In `testdata/team_tracker_data.py`, tests dynamically inject the current calendar date (`YYYY-MM-DD`) and precise runtime (`HH:MM:SS`), guaranteeing that every execution creates a uniquely verifiable entry.
+
+### 4. Real-time Live Step Streaming
+- Tests execute with `StepLogger`, emitting real-time progress indicators:
+  ```text
+  [12:00:01] >> [STEP 01/11] Open ChartApps Dashboard & Verify Session
+  [12:00:04] [PASS] [STEP 01/11] - Dashboard reached and session validated
+  ...
+  ```
+- Pytest runs with `-s -v` and `PYTHONUNBUFFERED=1` so steps appear immediately in the terminal and GitHub Actions logs.
+- Summary tables are automatically written to `$GITHUB_STEP_SUMMARY` on GitHub.
+
+### 5. Automated HTML Email Notifications
+- At the end of every run, `utils/email_notifier.py`:
+  - Sends a **Vibrant Green** email on **PASS** with a complete step breakdown.
+  - Sends a **Vibrant Red** email on **FAIL** with error logs and an **embedded inline screenshot** of the failed page area.
+  - Sends directly to `saravanans@objectways.com`.
+
+---
+
+## 💻 How to Run Locally
+
+### 1. Install Dependencies
 ```powershell
 pip install -r requirements.txt
 playwright install
 ```
 
----
-
-## 🔑 Handling Google Authentication (Anti-Bot Bypass)
-
-Google blocks automated browsers from entering passwords with:
-> *"Couldn't sign you in — This browser or app may not be secure."*
-
-This framework provides two proven methods to bypass this block:
-
-### Method A: One-Time Manual Login (Recommended)
-1. Run the native Chrome login launcher:
-   ```powershell
-   .\start_login.bat
-   ```
-2. Log in with your Google email, password, and 2FA.
-3. Once you reach the ChartApps dashboard, keep the browser open or close it. Your profile is automatically saved to `.auth_profile/`.
-4. Subsequent test runs will now reuse this profile automatically!
-
-### Method B: Playwright Codegen with Bot-Bypass
-If you want to record new tests using Playwright's visual inspector without being blocked by Google:
+### 2. Execute the Regression Suite (Default Headless)
 ```powershell
-python record.py
+pytest -m regression -s -v
 ```
-*This launches the Playwright Inspector on real Google Chrome with the `--enable-automation` flag removed, allowing you to enter your email and password without Google's security block.*
+
+### 3. Run in Visible (Headed) Browser Mode
+```powershell
+$env:HEADED="true"; pytest -m regression -s -v
+```
+
+### 4. Run Directly as a Standalone Script
+```powershell
+python tests/test_team_tracker_regression.py
+```
 
 ---
 
-## 🧪 Test Execution Commands
+## ⚙️ CI/CD & Automated Scheduling (GitHub Actions)
 
-| Scenario / Goal | Command | Description |
-| :--- | :--- | :--- |
-| **Run Regression Suite** | `pytest -m regression` | Runs the Team Tracker form submission and data stored validation. |
-| **Run All Tests** | `pytest` | Executes all test suites and generates the Azure HTML & XML reports. |
-| **Run Form Submission (Standalone)** | `python tests/test_team_tracker_regression.py` | Runs regression test directly and keeps the browser open for visual inspection. |
-| **Run Spreadsheet Operations** | `pytest tests/test_spreadsheet.py -v` | Validates spreadsheet loading using the retained session. |
-| **Run Login Test** | `pytest tests/test_login.py -v` | Executes the login test. |
-| **Run in Headed Mode** | `pytest --headed` | Displays the browser window during test execution. |
+The workflow file is located at [`.github/workflows/playwright.yml`](.github/workflows/playwright.yml).
 
----
-
-## 📊 Azure DevOps Test Reporting & Failure Identification
-
-The framework generates **scenario-level test results** formatted for Azure DevOps pipelines:
-
-### Auto-Generated Reports
-1. **Azure HTML Dashboard (`reports/azure_test_report.html`)**:
-   - Self-contained single-file HTML report.
-   - Shows pass/fail status, execution time, and duration for every individual test scenario.
-   - Embeds failure diagnostics directly in the table.
-   - **Automatic Browser Launch on Failure**: Whenever a test scenario fails, this report automatically opens in your default web browser for immediate review.
-2. **JUnit XML (`reports/junit_report.xml`)**:
-   - Machine-readable test execution data natively consumed by Azure DevOps Pipelines.
-3. **Automatic Scenario-Level Failure Screenshots (`reports/screenshots/`)**:
-   - Whenever any test scenario fails, a hook in `conftest.py` automatically captures the browser page state.
-   - The screenshot is linked and embedded directly inside the HTML report next to the failed test step with a `❌ Scenario Failed` label.
-
-### Azure DevOps Pipeline Configuration (`azure-pipelines.yml`)
-Add the following steps to your Azure pipeline to display scenario results and the HTML report in Azure DevOps:
-
+### Schedule Configuration
 ```yaml
-trigger:
-  - main
-
-pool:
-  vmImage: 'windows-latest'
-
-steps:
-- task: UsePythonVersion@0
-  inputs:
-    versionSpec: '3.12'
-  displayName: 'Use Python 3.12'
-
-- script: |
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
-    playwright install chromium chrome
-  displayName: 'Install Dependencies & Playwright'
-
-- script: |
-    pytest -m regression --html=reports/azure_test_report.html --self-contained-html --junitxml=reports/junit_report.xml
-  displayName: 'Execute Playwright Regression Tests'
-
-# Publishes Scenario-Level Results in Azure DevOps "Tests" tab
-- task: PublishTestResults@2
-  inputs:
-    testResultsFormat: 'JUnit'
-    testResultsFiles: 'reports/junit_report.xml'
-    searchFolder: '$(System.DefaultWorkingDirectory)'
-    failTaskOnFailedTests: true
-    testRunTitle: 'ChartApps Regression Test Results'
-  displayName: 'Publish Scenario Test Results'
-  condition: always()
-
-# Publishes the interactive HTML Report as a downloadable pipeline artifact
-- task: PublishPipelineArtifact@1
-  inputs:
-    targetPath: 'reports/azure_test_report.html'
-    artifact: 'Azure_HTML_Test_Report'
-  displayName: 'Publish Azure HTML Test Report'
-  condition: always()
+  schedule:
+    # 1. Today's custom run (Nov 19) at 12:45 PM IST (07:15 UTC)
+    - cron: '15 7 19 11 *'
+    # 2. Daily recurring auto-run at 11:00 AM IST (05:30 UTC)
+    - cron: '30 5 * * *'
 ```
 
----
-
-## ⚡ GitHub Actions CI/CD Integration
-
-The repository includes a ready-to-run GitHub Actions workflow located at [.github/workflows/playwright.yml](file:///c:/Saravanan%20Laptop/ChartApps/.github/workflows/playwright.yml).
-
-### Workflow Triggers
-- **Push / Pull Request**: Automatically executes on any push or PR to `main`.
-- **Manual Trigger (`workflow_dispatch`)**: Can be run manually at any time by clicking **"Run workflow"** under the **Actions** tab on GitHub.
-
-### How to Add Your Saved Session to GitHub Actions (Optional for CI)
-To allow tests to run authenticated in headless CI:
-1. Open `.auth_profile/storage_state.json` on your local machine and copy its entire JSON text.
-2. Go to your GitHub repository: **Settings $\to$ Secrets and variables $\to$ Actions**.
-3. Click **New repository secret**.
-4. Name: `AUTH_STORAGE_STATE`
-5. Value: *Paste the contents of `storage_state.json`*.
-6. Click **Add secret**.
-
-The workflow will automatically restore this session on the CI runner, run the regression tests, and upload `azure_test_report.html` and failure screenshots as workflow artifacts!
-
----
-
-## 🧩 Page Object Model (POM) Design Summary
-
-- **Separation of Concerns**: Locators (`locators/`) are separated from page actions (`pages/`), test data (`testdata/`), and test assertions (`tests/`).
-- **Dynamic Date & Time**: `TeamTrackerTestData` injects the exact `YYYY-MM-DD` date and execution timestamp into form fields dynamically to ensure test idempotency.
-- **Robust Overlay Handling**: Form submit handles PrimeReact calendar and dropdown overlays with automatic focus clearing and `force=True` fallback.
-- **Session Continuity**: Browser contexts maintain cookies and session state across runs, preventing recurring 2FA or OAuth prompts.
-
+### Triggers Available:
+1. **Scheduled Auto-run**: Fires automatically based on the cron schedule.
+2. **Manual Run**: Click **"Run workflow"** from the GitHub Actions UI anytime.
+3. **Push / Pull Request**: Executes automatically when code is pushed to `main`.

@@ -134,8 +134,10 @@ def run_standalone() -> None:
                 pass
             report_path = Path("reports/azure_test_report.html").resolve()
             if report_path.exists():
-                print(f"[INFO] Opening report: {report_path}")
-                webbrowser.open(report_path.as_uri())
+                print(f"[INFO] Report generated: {report_path}")
+                import os
+                if not os.environ.get("CI"):
+                    webbrowser.open(report_path.as_uri())
             raise e
         finally:
             context.close()

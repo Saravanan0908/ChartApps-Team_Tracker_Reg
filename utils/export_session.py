@@ -1,7 +1,12 @@
 """Helper script to export your logged-in session to storage_state.json for GitHub Actions."""
 
+import sys
 import json
 from pathlib import Path
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from playwright.sync_api import sync_playwright
 from utils.config import USER_DATA_DIR, STORAGE_STATE_PATH
 
