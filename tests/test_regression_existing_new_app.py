@@ -272,22 +272,53 @@ def run_standalone(target_scenario: str = "all") -> None:
             user_data_dir=USER_DATA_DIR,
             headless=HEADLESS,
         )
+        scenario_failures: list[tuple[str, Exception]] = []
+
         try:
             # 1. Execute Scenario 1: Existing App (if requested)
             if target_scenario in ("all", "existing", "existing_app"):
                 print("\n" + "#" * 60)
                 print(">>> SCENARIO 1: EXISTING APP (TEAM TRACKER) <<<")
                 print("#" * 60)
-                test_01_existing_app_team_tracker_regression(page)
-                print("[SUCCESS] Scenario 1 Passed Successfully!\n")
+                try:
+                    test_01_existing_app_team_tracker_regression(page)
+                    print("[SUCCESS] Scenario 1 Passed Successfully!\n")
+                except Exception as sc1_err:
+                    print(f"\n[ERROR] Scenario 1 Failed: {sc1_err}")
+                    scenario_failures.append(("Scenario 1: Existing App (Team Tracker)", sc1_err))
+                    reports_dir = Path("reports/screenshots")
+                    reports_dir.mkdir(parents=True, exist_ok=True)
+                    screenshot_path = reports_dir / f"failure_scenario1_{int(time.time())}.png"
+                    try:
+                        page.screenshot(path=str(screenshot_path))
+                        print(f"[INFO] Failure screenshot captured for Scenario 1: {screenshot_path}")
+                    except Exception:
+                        pass
+                    print("\n[INFO] As instructed: Error encountered in Existing App. Continuing directly to Scenario 2 (New App Creation)...\n")
 
             # 2. Execute Scenario 2: New App Creation & Workflow (if requested)
             if target_scenario in ("all", "new", "new_app"):
                 print("\n" + "#" * 60)
                 print(">>> SCENARIO 2: NEW APP CREATION & WORKFLOW <<<")
                 print("#" * 60)
-                test_02_new_app_creation_and_end_user_flow(page, playwright=playwright)
-                print("[SUCCESS] Scenario 2 Passed Successfully!\n")
+                try:
+                    test_02_new_app_creation_and_end_user_flow(page, playwright=playwright)
+                    print("[SUCCESS] Scenario 2 Passed Successfully!\n")
+                except Exception as sc2_err:
+                    print(f"\n[ERROR] Scenario 2 Failed: {sc2_err}")
+                    scenario_failures.append(("Scenario 2: New App Creation & Workflow", sc2_err))
+                    reports_dir = Path("reports/screenshots")
+                    reports_dir.mkdir(parents=True, exist_ok=True)
+                    screenshot_path = reports_dir / f"failure_scenario2_{int(time.time())}.png"
+                    try:
+                        page.screenshot(path=str(screenshot_path))
+                        print(f"[INFO] Failure screenshot captured for Scenario 2: {screenshot_path}")
+                    except Exception:
+                        pass
+
+            if scenario_failures:
+                failed_names = ", ".join([name for name, _ in scenario_failures])
+                raise AssertionError(f"Regression suite completed with failures: {failed_names}")
 
             print("\n" + "=" * 75)
             print("[COMPLETE] ALL REQUESTED REGRESSION SCENARIOS PASSED SUCCESSFULLY!")

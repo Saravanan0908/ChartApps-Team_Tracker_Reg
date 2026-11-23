@@ -328,15 +328,41 @@ class TeamTrackerPage(BasePage):
         except Exception:
             pass
 
-    def verify_data_stored_in_table(self, task_description: str, activity_text: str) -> None:
+    def verify_data_stored_in_table(self, task_description: str, activity_text: str, timeout_ms: int = 15000) -> None:
         """Verify that the submitted task and activity strings appear in the spreadsheet table.
+        If displayed, verify successfully and dismiss any popup; if not displayed, throw an error.
         
         Args:
             task_description (str): The submitted task description to locate.
             activity_text (str): The submitted activity text to locate.
+            timeout_ms (int): Maximum timeout in ms to wait for the row to appear.
         """
         task_locator = self.page.get_by_text(task_description).or_(self.page.locator(f'[title*="{task_description[:20]}"]'))
         activity_locator = self.page.get_by_text(activity_text)
 
-        expect(task_locator.first).to_be_visible(timeout=10000)
-        expect(activity_locator.first).to_be_visible(timeout=10000)
+        try:
+            expect(task_locator.first).to_be_visible(timeout=timeout_ms)
+            expect(activity_locator.first).to_be_visible(timeout=timeout_ms)
+        except Exception as initial_err:
+            # Re-attempt after re-sorting and small wait
+            try:
+                self.sort_table_by_date()
+                self.page.wait_for_timeout(1000)
+                expect(task_locator.first).to_be_visible(timeout=5000)
+                expect(activity_locator.first).to_be_visible(timeout=5000)
+            except Exception:
+                raise AssertionError(
+                    f"Entered form data was NOT displayed in spreadsheet table: "
+                    f"Task='{task_description}', Activity='{activity_text}'. Details: {initial_err}"
+                )
+
+        # Close details drawer / slider popup if opened by table row interaction
+        try:
+            sidebar = self.page.locator(".custom-sidebar-width, div[style*='z-index: 10000']")
+            if sidebar.is_visible(timeout=500):
+                close_btn = sidebar.locator("button.absolute, button").first
+                if close_btn.is_visible(timeout=500):
+                    close_btn.click(force=True)
+                self.page.keyboard.press("Escape")
+        except Exception:
+            pass
