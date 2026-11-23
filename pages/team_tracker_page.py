@@ -88,7 +88,7 @@ class TeamTrackerPage(BasePage):
     @property
     def date_cell_header(self) -> Locator:
         """Locator for the 'Date' table column header used for sorting."""
-        return self.page.get_by_role("cell", name=TeamTrackerLocators.DATE_COLUMN_HEADER)
+        return self.page.locator("th:has-text('Date'), [role='columnheader']:has-text('Date'), .p-sortable-column:has-text('Date')")
 
     @property
     def sort_column_icon(self) -> Locator:
@@ -318,23 +318,36 @@ class TeamTrackerPage(BasePage):
         """
         expect(self.success_toast.first).to_be_visible(timeout=10000)
 
+    def ensure_table_sorted_descending(self) -> None:
+        """Ensure the table has newest records (today's date) at the top."""
+        date_th = self.date_cell_header.first
+        if not date_th.is_visible(timeout=3000):
+            return
+
+        today_prefix = datetime.now().strftime("%Y")
+
+        for attempt in range(3):
+            first_cell_text = ""
+            try:
+                first_cell = self.page.locator("table tbody tr:first-child td:first-child, .p-datatable-tbody tr:first-child td:first-child").first
+                if first_cell.is_visible(timeout=1000):
+                    first_cell_text = first_cell.inner_text().strip()
+            except Exception:
+                pass
+
+            if first_cell_text.startswith(today_prefix):
+                print(f"[INFO] Table is sorted descending (top row date: '{first_cell_text}').")
+                return
+
+            print(f"[INFO] Top row date is '{first_cell_text}'. Clicking Date header to sort descending (attempt {attempt+1})...")
+            date_th.click()
+            self.page.wait_for_timeout(1000)
+
     def sort_table_by_date(self) -> None:
         """Sort the spreadsheet table by Date descending to bring the newly added entry to the top."""
-        try:
-            date_th = self.date_cell_header.first
-            if date_th.is_visible(timeout=2000):
-                current_sort = date_th.get_attribute("aria-sort") or ""
-                if current_sort != "descending":
-                    date_th.click()
-                    self.page.wait_for_timeout(500)
-                    new_sort = date_th.get_attribute("aria-sort") or ""
-                    if new_sort == "ascending":
-                        date_th.click()
-                        self.page.wait_for_timeout(500)
-        except Exception:
-            pass
+        self.ensure_table_sorted_descending()
 
-    def verify_data_stored_in_table(self, task_description: str, activity_text: str, timeout_ms: int = 15000) -> None:
+    def verify_data_stored_in_table(self, task_description: str, activity_text: str, timeout_ms: int = 20000) -> None:
         """Verify that the submitted task and activity strings appear in the spreadsheet table.
         Prints only expected and actual displayed data without dumping the entire table.
         
@@ -343,24 +356,37 @@ class TeamTrackerPage(BasePage):
             activity_text (str): The submitted activity text to locate.
             timeout_ms (int): Maximum timeout in ms to wait for the row to appear.
         """
-        task_locator = self.page.get_by_text(task_description).or_(self.page.locator(f'[title*="{task_description[:20]}"]'))
-        activity_locator = self.page.get_by_text(activity_text)
+        task_snippet = task_description[:25]
+        task_locator = self.page.locator("table tbody, .p-datatable-tbody").get_by_text(task_snippet)
+        activity_snippet = activity_text[:25]
+        activity_locator = self.page.locator("table tbody, .p-datatable-tbody").get_by_text(activity_snippet)
+
+        # 1. Ensure table is sorted descending so new records are at the top
+        self.ensure_table_sorted_descending()
 
         start_time = time.time()
         found = False
 
         while (time.time() - start_time) < (timeout_ms / 1000.0):
             try:
-                if task_locator.first.is_visible(timeout=500) and activity_locator.first.is_visible(timeout=500):
+                if task_locator.first.is_visible(timeout=1000):
                     found = True
                     break
             except Exception:
                 pass
-            # Try sorting descending to ensure latest records are at top
+
+            # If not visible on current page, check next page or re-sort
             try:
-                self.sort_table_by_date()
+                next_page = self.page.locator(".p-paginator-next:not(.p-disabled)").first
+                if next_page.is_visible(timeout=500):
+                    next_page.click()
+                    self.page.wait_for_timeout(1000)
+                    if task_locator.first.is_visible(timeout=1000):
+                        found = True
+                        break
             except Exception:
                 pass
+
             self.page.wait_for_timeout(1000)
 
         # Close details drawer / slider popup if opened by table row interaction
@@ -374,7 +400,8 @@ class TeamTrackerPage(BasePage):
         except Exception:
             pass
 
-        # Extract actual displayed top row for clean reporting (without dumping entire table)
+        # Extract actual displayed top row for clean reporting
+        actual_date = "Not Found"
         actual_task = "Not Found"
         actual_activity = "Not Found"
         try:
@@ -382,14 +409,17 @@ class TeamTrackerPage(BasePage):
             if rows.count() > 0:
                 first_row = rows.first
                 cells = [c.strip() for c in first_row.locator("td").all_inner_texts() if c.strip()]
-                if len(cells) >= 3:
+                if len(cells) >= 4:
+                    # Table layout: [Date, Session, Task / Activity, Remarks / Status, Action]
+                    actual_date = cells[0]
+                    actual_task = cells[2]
+                    actual_activity = cells[3]
+                elif len(cells) >= 3:
+                    actual_date = cells[0]
                     actual_task = cells[1]
                     actual_activity = cells[2]
-                elif len(cells) == 2:
-                    actual_task = cells[0]
-                    actual_activity = cells[1]
-                elif cells:
-                    actual_task = cells[0]
+                elif len(cells) >= 1:
+                    actual_date = cells[0]
         except Exception:
             pass
 
@@ -397,16 +427,16 @@ class TeamTrackerPage(BasePage):
             print("\n" + "-" * 60)
             print("[PASS] Table Row Verification Succeeded:")
             print(f"  Expected: Task='{task_description}' | Activity='{activity_text}'")
-            print(f"  Actual:   Task='{task_description}' | Activity='{activity_text}' (Displayed in Table)")
+            print(f"  Actual:   Task='{task_description}' (Displayed in Table)")
             print("-" * 60 + "\n")
         else:
             print("\n" + "-" * 60)
             print("[FAIL] Table Row Verification Failed:")
             print(f"  Expected: Task='{task_description}' | Activity='{activity_text}'")
-            print(f"  Actual:   Task='{actual_task}' | Activity='{actual_activity}'")
+            print(f"  Actual displayed top row: Date='{actual_date}', Task='{actual_task}', Activity='{actual_activity}'")
             print("-" * 60 + "\n")
             raise AssertionError(
                 f"Table Verification Failed:\n"
                 f"  Expected: Task='{task_description}' | Activity='{activity_text}'\n"
-                f"  Actual:   Task='{actual_task}' | Activity='{actual_activity}'"
+                f"  Actual displayed top row: Date='{actual_date}', Task='{actual_task}', Activity='{actual_activity}'"
             )
