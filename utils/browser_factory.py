@@ -40,6 +40,12 @@ def launch_persistent_browser(
     if channel:
         launch_kwargs["channel"] = channel
 
+    # Record video for failure capture & reporting
+    videos_dir = Path("reports/videos")
+    videos_dir.mkdir(parents=True, exist_ok=True)
+    launch_kwargs["record_video_dir"] = str(videos_dir)
+    launch_kwargs["record_video_size"] = {"width": 1280, "height": 720}
+
     # Note: launch_persistent_context does not take 'storage_state' as a parameter;
     # it uses the SQLite database in user_data_dir.
     context = playwright.chromium.launch_persistent_context(**launch_kwargs)

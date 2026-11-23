@@ -3,6 +3,7 @@
 import re
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright, expect
 
@@ -377,6 +378,56 @@ class AppBuilderPage(BasePage):
         except Exception:
             pass
 
+    def close_open_dialogs(self, target_page: Optional[Page] = None) -> None:
+        """Close any modal popup dialog (such as Privacy Settings or publish modal) that may be open."""
+        p = target_page or self.page
+        p.wait_for_timeout(300)
+
+        # 1. Targeted locators for modal dialog close buttons
+        dialog_close_locators = [
+            p.locator("[role='dialog'] button[aria-label*='Close' i]").first,
+            p.locator(".p-dialog-header-close, .p-dialog-header-icon").first,
+            p.locator("[role='dialog'] button.absolute, [role='dialog'] button.top-1, [role='dialog'] button:has(svg)").first,
+            p.locator("div:has(> h3:has-text('Privacy Settings')) button").first,
+            p.get_by_role("button").filter(has_text=re.compile(r"^$")).first,
+        ]
+        for loc in dialog_close_locators:
+            try:
+                if loc.is_visible(timeout=500):
+                    loc.click(force=True)
+                    p.wait_for_timeout(400)
+                    if not p.locator("[role='dialog'], .p-dialog, div:has(> h3:has-text('Privacy Settings'))").is_visible(timeout=500):
+                        return
+            except Exception:
+                pass
+
+        # 2. Dismiss via Escape key
+        try:
+            p.keyboard.press("Escape")
+            p.wait_for_timeout(300)
+            if not p.locator("[role='dialog'], .p-dialog").is_visible(timeout=500):
+                return
+        except Exception:
+            pass
+
+        # 3. Direct DOM cleanup to remove any lingering dialog and modal mask overlay
+        try:
+            p.evaluate("""() => {
+                const dialogs = document.querySelectorAll("[role='dialog'], .p-dialog, .p-dialog-mask, .modal-backdrop");
+                for (const d of dialogs) {
+                    const btn = d.querySelector("button[aria-label*='Close' i], .p-dialog-header-close, button.absolute, button");
+                    if (btn) {
+                        btn.click();
+                    }
+                    if (document.querySelectorAll("[role='dialog'], .p-dialog-mask").length > 0) {
+                        d.remove();
+                    }
+                }
+            }""")
+            p.wait_for_timeout(300)
+        except Exception:
+            pass
+
     def select_date_picker_value(self, target_page: Page, selected_date: str) -> str:
         """Select current date in the form date picker via calendar popup and day cell click."""
         now = datetime.now()
@@ -602,23 +653,28 @@ class AppBuilderPage(BasePage):
 
         dialog_save = self.page.locator(AppBuilderLocators.DIALOG_SAVE_BUTTON).first
         dialog_save.click()
-        self.page.wait_for_timeout(1500)
+        self.page.wait_for_timeout(1000)
 
-        # Get Public URL from input or current origin
+        # Get Public URL from input or current origin before closing dialog
+        return_url = ""
         public_url_input = self.page.get_by_role("textbox", name=AppBuilderLocators.ENTER_PUBLIC_URL_INPUT)
         if public_url_input.is_visible(timeout=3000):
             url_val = public_url_input.input_value()
             if url_val and "chartapps.app" in url_val:
                 if not url_val.startswith("http"):
                     url_val = f"https://{url_val}"
-                return url_val.rstrip("/")
+                return_url = url_val.rstrip("/")
 
-        if hasattr(self, "app_slug") and self.app_slug:
-            return f"https://{self.app_slug}.chartapps.app"
+        if not return_url and hasattr(self, "app_slug") and self.app_slug:
+            return_url = f"https://{self.app_slug}.chartapps.app"
 
-        curr = self.page.url
-        base_url = curr.split("?")[0].rstrip("/")
-        return base_url
+        if not return_url:
+            curr = self.page.url
+            return_url = curr.split("?")[0].rstrip("/")
+
+        # Close Privacy Settings modal so the editor view and sidebar are completely unblocked
+        self.close_open_dialogs(self.page)
+        return return_url
 
     def submit_and_verify_as_end_user(
         self,
@@ -635,11 +691,17 @@ class AppBuilderPage(BasePage):
         own_context = False
 
         if playwright is not None:
+            videos_dir = Path("reports/videos")
+            videos_dir.mkdir(parents=True, exist_ok=True)
             user_browser = playwright.chromium.launch(
                 headless=HEADLESS,
                 args=["--disable-blink-features=AutomationControlled"],
             )
-            user_context = user_browser.new_context(viewport={"width": 1920, "height": 1080})
+            user_context = user_browser.new_context(
+                viewport={"width": 1920, "height": 1080},
+                record_video_dir=str(videos_dir),
+                record_video_size={"width": 1280, "height": 720},
+            )
             own_browser = True
             own_context = True
         elif browser is not None:
@@ -745,18 +807,41 @@ class AppBuilderPage(BasePage):
                     user_browser.close()
                 except Exception:
                     pass
+            # Back on the first tab: bring to front and close any lingering popups/modals
+            try:
+                self.page.bring_to_front()
+                self.close_open_dialogs(self.page)
+            except Exception:
+                pass
 
     def delete_app_and_cleanup(self, app_name: str) -> None:
         """Delete the created app from ChartApps and confirm dialog."""
-        del_btn = self.page.get_by_role("button", name="Delete App")
-        if not del_btn.is_visible(timeout=3000):
-            sidebar_icon = self.page.locator("li:has-text('Settings'), li:nth-child(5) .sidebar-item-content").first
-            if sidebar_icon.is_visible(timeout=3000):
-                sidebar_icon.click()
-                self.page.wait_for_timeout(1000)
+        # Ensure focus is on the first tab and any lingering dialogs/modals are closed
+        try:
+            self.page.bring_to_front()
+        except Exception:
+            pass
+        self.close_open_dialogs(self.page)
+        self.page.wait_for_timeout(1000)
 
         del_btn = self.page.get_by_role("button", name="Delete App")
-        if del_btn.is_visible(timeout=3000):
+        if not del_btn.is_visible(timeout=3000):
+            sidebar_icon = self.page.locator("li:has-text('App Settings'), li:has-text('Settings'), li:nth-child(5) .sidebar-item-content").first
+            if sidebar_icon.is_visible(timeout=3000):
+                sidebar_icon.click(force=True)
+                self.page.wait_for_timeout(1500)
+
+        del_btn = self.page.get_by_role("button", name="Delete App")
+        if not del_btn.is_visible(timeout=3000):
+            del_btn = self.page.locator("button:has-text('Delete App')").first
+
+        if del_btn.is_visible(timeout=5000):
             self.page.once("dialog", lambda dialog: dialog.accept())
             del_btn.click()
-            self.page.wait_for_timeout(3000)
+            self.page.wait_for_timeout(2000)
+
+            # Handle confirmation modal button if present
+            confirm_btn = self.page.locator("[role='dialog'] button:has-text('Delete'), [role='dialog'] button:has-text('Confirm'), [role='dialog'] button:has-text('Yes')").first
+            if confirm_btn.is_visible(timeout=2000):
+                confirm_btn.click(force=True)
+                self.page.wait_for_timeout(2000)

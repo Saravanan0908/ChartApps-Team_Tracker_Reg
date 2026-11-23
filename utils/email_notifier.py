@@ -20,6 +20,7 @@ from email.mime.image import MIMEImage
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime
+from utils.video_helper import find_videos, trim_video_to_last_n_seconds, clean_passed_videos
 
 
 def get_git_info() -> dict:
@@ -140,7 +141,7 @@ def find_screenshots() -> list[Path]:
     return pngs
 
 
-def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") -> str:
+def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "", video_filename: str = "") -> str:
     """Generate high-impact HTML email body with scenario matrix and checklist."""
     is_passed = results["is_passed"]
     status_text = "PASSED" if is_passed else "FAILED"
@@ -220,24 +221,32 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") ->
                 badge_col = "#047857" if s_passed else "#dc2626"
                 step_rows.append(f"""
                 <tr style="border-bottom: 1px solid #f3f4f6;">
-                  <td style="padding: 8px 12px; width: 40px; text-align: center;">
+                  <td style="padding: 10px 12px; width: 40px; text-align: center;">
                     <span style="display: inline-block; width: 22px; height: 22px; line-height: 22px; border-radius: 50%; background: {badge_bg}; color: {badge_col}; font-size: 12px; font-weight: 700;">{icon}</span>
                   </td>
-                  <td style="padding: 8px 12px; font-weight: 600; color: #4b5563; width: 70px; font-size: 13px;">Step {s_num:02d}</td>
-                  <td style="padding: 8px 12px; color: #374151; font-size: 13px;">{s_desc}</td>
-                  <td style="padding: 8px 12px; text-align: right; width: 80px;">
-                    <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: {badge_bg}; color: {badge_col};">
+                  <td style="padding: 10px 12px; font-weight: 700; color: #4b5563; width: 75px; font-size: 13px;">Step {s_num:02d}</td>
+                  <td style="padding: 10px 12px; color: #1f2937; font-size: 13px;">{s_desc}</td>
+                  <td style="padding: 10px 12px; text-align: right; width: 90px;">
+                    <span style="display: inline-block; padding: 3px 10px; border-radius: 9999px; font-size: 11px; font-weight: 800; background: {badge_bg}; color: {badge_col}; letter-spacing: 0.5px;">
                       {s_status}
                     </span>
                   </td>
                 </tr>
                 """)
             checklist_sections.append(f"""
-            <div style="margin-top: 18px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-              <div style="background: #f9fafb; padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-weight: 700; font-size: 14px; color: #374151;">
+            <div style="margin-top: 18px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div style="background: #f9fafb; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; font-weight: 700; font-size: 14px; color: #1f2937;">
                 📋 Checklist: {s_title}
               </div>
               <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                  <tr style="background: #f3f4f6; text-align: left; font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase;">
+                    <th style="padding: 8px 12px; text-align: center; width: 40px;">Status</th>
+                    <th style="padding: 8px 12px; width: 75px;">Step</th>
+                    <th style="padding: 8px 12px;">Verification Item</th>
+                    <th style="padding: 8px 12px; text-align: right; width: 90px;">Result</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {''.join(step_rows)}
                 </tbody>
@@ -283,6 +292,16 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") ->
             <img src="cid:{screenshot_cid}" alt="Failure Area Screenshot" style="max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" />
           </div>
           <p style="margin: 8px 0 0; color: #9ca3af; font-size: 11px; text-align: center;">Image is also attached to this email for full-resolution review.</p>
+        </div>
+        """
+
+    # Video HTML (only on failure when video is attached)
+    video_html = ""
+    if not is_passed and video_filename:
+        video_html = f"""
+        <div style="margin-top: 20px; padding: 14px 16px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px;">
+          <div style="font-weight: 700; color: #be123c; font-size: 14px; margin-bottom: 4px;">🎥 Last 20s Failure Video Attached</div>
+          <div style="font-size: 12px; color: #4b5563;">A 20-second video recording capturing the visual state leading up to the failure (<code>{video_filename}</code>) has been attached to this email for playback.</div>
         </div>
         """
 
@@ -349,6 +368,7 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") ->
           {scenario_matrix_html}
           {failure_html}
           {screenshot_html}
+          {video_html}
           {checklist_html}
 
           <div style="margin-top: 28px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; color: #9ca3af; font-size: 12px;">
@@ -376,24 +396,33 @@ def send_notification() -> None:
 
     results = parse_test_results()
     git_info = get_git_info()
-    screenshots = find_screenshots()
-
     is_passed = results["is_passed"]
+
+    screenshots = find_screenshots() if not is_passed else []
+    videos = find_videos() if not is_passed else []
+    video_to_attach = None
+    if not is_passed and videos:
+        # Trim latest video to last 20 seconds
+        video_to_attach = trim_video_to_last_n_seconds(videos[0], max_seconds=20)
+    elif is_passed:
+        # Clean up video files on pass
+        clean_passed_videos()
+
     subject_status = "PASS" if is_passed else "FAIL"
     subject_icon = "🟢" if is_passed else "🔴"
     subject = f"{subject_icon} [{subject_status}] ChartApps Regression Suite (Existing & New App) - {git_info['branch']} ({results['duration']}s)"
 
     print("=" * 65)
     print(f"[EMAIL] Test Result Status: {subject_status}")
-    print(f"[EMAIL] Found {len(screenshots)} failure screenshot(s)")
+    if not is_passed:
+        print(f"[EMAIL] Found {len(screenshots)} failure screenshot(s)")
+        print(f"[EMAIL] Failure video attached: {video_to_attach.name if video_to_attach else 'None'}")
+    else:
+        print(f"[EMAIL] All tests PASSED! Video/screenshot attachments suppressed; checklist report generated.")
     print("=" * 65)
 
     if not smtp_user or not smtp_pass:
-        print("[NOTICE] Email credentials (EMAIL_USERNAME / EMAIL_PASSWORD) are not configured in GitHub Secrets.")
-        print("[NOTICE] To enable email alerts, add repository secrets:")
-        print("         1. EMAIL_USERNAME : Your email address (e.g. chartapps.com@gmail.com)")
-        print("         2. EMAIL_PASSWORD : Your Gmail App Password (16 characters)")
-        print("         3. EMAIL_TO       : Destination email(s) (optional, defaults to EMAIL_USERNAME)")
+        print("[NOTICE] Email credentials (EMAIL_USERNAME / EMAIL_PASSWORD) are not configured in environment.")
         print("[NOTICE] Skipping email delivery for this run.")
         return
 
@@ -408,51 +437,53 @@ def send_notification() -> None:
     msg["To"] = ", ".join(recipients)
 
     screenshot_cid = "failure_screenshot" if (not is_passed and screenshots) else ""
-    html_content = build_email_html(results, git_info, screenshot_cid=screenshot_cid)
+    video_filename = video_to_attach.name if (not is_passed and video_to_attach) else ""
+    html_content = build_email_html(results, git_info, screenshot_cid=screenshot_cid, video_filename=video_filename)
 
     msg_alt = MIMEMultipart("alternative")
     msg.attach(msg_alt)
     msg_alt.attach(MIMEText(html_content, "html", "utf-8"))
 
-    # Attach & embed screenshot if failed
-    if not is_passed and screenshots:
-        primary_screenshot = screenshots[0]
-        try:
-            with open(primary_screenshot, "rb") as img_f:
-                img_data = img_f.read()
-                img = MIMEImage(img_data)
-                img.add_header("Content-ID", f"<{screenshot_cid}>")
-                img.add_header("Content-Disposition", "inline", filename=primary_screenshot.name)
-                msg.attach(img)
-                print(f"[INFO] Embedded inline screenshot: {primary_screenshot.name}")
-        except Exception as e:
-            print(f"[WARNING] Could not embed screenshot {primary_screenshot}: {e}")
-
-        for sc in screenshots:
+    # ONLY attach screenshot and video IF FAILED
+    if not is_passed:
+        if screenshots:
+            primary_screenshot = screenshots[0]
             try:
-                with open(sc, "rb") as sc_file:
-                    part = MIMEBase("application", "octet-stream")
-                    part.set_payload(sc_file.read())
-                    encoders.encode_base64(part)
-                    part.add_header("Content-Disposition", f'attachment; filename="{sc.name}"')
-                    msg.attach(part)
-                    print(f"[INFO] Attached screenshot file: {sc.name}")
+                with open(primary_screenshot, "rb") as img_f:
+                    img_data = img_f.read()
+                    img = MIMEImage(img_data)
+                    img.add_header("Content-ID", f"<{screenshot_cid}>")
+                    img.add_header("Content-Disposition", "inline", filename=primary_screenshot.name)
+                    msg.attach(img)
+                    print(f"[INFO] Embedded inline screenshot: {primary_screenshot.name}")
             except Exception as e:
-                print(f"[WARNING] Could not attach screenshot {sc}: {e}")
+                print(f"[WARNING] Could not embed screenshot {primary_screenshot}: {e}")
 
-    # Dispatch via SMTP
-    try:
-        print(f"[INFO] Connecting to SMTP server {smtp_server}:{smtp_port}...")
-        server = smtplib.SMTP(smtp_server, smtp_port, timeout=30)
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.login(smtp_user, smtp_pass)
-        server.sendmail(smtp_user, recipients, msg.as_string())
-        server.quit()
-        print(f"[SUCCESS] Email notification dispatched to: {', '.join(recipients)}")
-    except Exception as exc:
-        print(f"[ERROR] Failed to send email via SMTP: {exc}")
+            for sc in screenshots:
+                try:
+                    with open(sc, "rb") as sc_file:
+                        part = MIMEBase("application", "octet-stream")
+                        part.set_payload(sc_file.read())
+                        encoders.encode_base64(part)
+                        part.add_header("Content-Disposition", f'attachment; filename="{sc.name}"')
+                        msg.attach(part)
+                        print(f"[INFO] Attached screenshot file: {sc.name}")
+                except Exception as e:
+                    print(f"[WARNING] Could not attach screenshot {sc}: {e}")
+
+        if video_to_attach and video_to_attach.exists():
+            try:
+                with open(video_to_attach, "rb") as vid_file:
+                    v_mime = "video/mp4" if video_to_attach.suffix == ".mp4" else "video/webm"
+                    main_t, sub_t = v_mime.split("/")
+                    part = MIMEBase(main_t, sub_t)
+                    part.set_payload(vid_file.read())
+                    encoders.encode_base64(part)
+                    part.add_header("Content-Disposition", f'attachment; filename="failure_run_last20s{video_to_attach.suffix}"')
+                    msg.attach(part)
+                    print(f"[INFO] Attached last 20s failure video: {video_to_attach.name}")
+            except Exception as e:
+                print(f"[WARNING] Could not attach failure video {video_to_attach}: {e}")
 
 
 if __name__ == "__main__":

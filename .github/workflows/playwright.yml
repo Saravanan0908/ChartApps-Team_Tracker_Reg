@@ -13,8 +13,6 @@ on:
       - main
 
   schedule:
-    # Daily at 11:00 AM IST (05:30 UTC)
-    - cron: '30 5 * * *'
 
     # Daily at 6:00 PM IST (12:30 UTC)
     - cron: '30 12 * * *'
@@ -140,6 +138,7 @@ jobs:
             reports/azure_test_report.html
             reports/junit_report.xml
             reports/screenshots/
+            reports/videos/
           if-no-files-found: warn
           retention-days: 14
 

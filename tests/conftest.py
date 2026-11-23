@@ -85,7 +85,24 @@ def pytest_runtest_makereport(item, call):
 
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
-    """Automatically open the Azure HTML report in the default browser when tests fail."""
+    """Automatically process failure videos/clean passed videos and open report if tests fail."""
+    if session.testsfailed == 0 and exitstatus == 0:
+        try:
+            from utils.video_helper import clean_passed_videos
+            clean_passed_videos()
+        except Exception:
+            pass
+    else:
+        try:
+            from utils.video_helper import find_videos, trim_video_to_last_n_seconds
+            vids = find_videos()
+            if vids:
+                trimmed = trim_video_to_last_n_seconds(vids[0], max_seconds=20)
+                if trimmed:
+                    print(f"[INFO] Processed last 20s failure video: {trimmed.name}")
+        except Exception as e:
+            print(f"[WARNING] Could not process failure video in sessionfinish: {e}")
+
     # Check if any test in the session failed
     if session.testsfailed > 0 or exitstatus != 0:
         report_path = Path("reports/azure_test_report.html").resolve()

@@ -271,6 +271,13 @@ def run_standalone(target_scenario: str = "all") -> None:
             print("[COMPLETE] ALL REQUESTED REGRESSION SCENARIOS PASSED SUCCESSFULLY!")
             print("=" * 75)
 
+            # Clean video files on pass
+            try:
+                from utils.video_helper import clean_passed_videos
+                clean_passed_videos()
+            except Exception:
+                pass
+
             # Local Debugging Pause / CodeGen
             if not os.environ.get("CI"):
                 print("\n[INFO] Tests completed. Opening Playwright Inspector for manual debugging...")
@@ -286,6 +293,19 @@ def run_standalone(target_scenario: str = "all") -> None:
                 print(f"[INFO] Failure screenshot captured: {screenshot_path}")
             except Exception:
                 pass
+
+            # Close context to flush video recording to disk and trim last 20 seconds
+            try:
+                context.close()
+                from utils.video_helper import find_videos, trim_video_to_last_n_seconds
+                videos = find_videos()
+                if videos:
+                    trimmed = trim_video_to_last_n_seconds(videos[0], max_seconds=20)
+                    if trimmed:
+                        print(f"[INFO] Processed last 20s failure video: {trimmed.name}")
+            except Exception as vid_err:
+                print(f"[WARNING] Could not process failure video: {vid_err}")
+
             report_path = Path("reports/azure_test_report.html").resolve()
             if report_path.exists():
                 print(f"[INFO] Report generated: {report_path}")
