@@ -311,36 +311,57 @@ class AppBuilderPage(BasePage):
         self.add_table_block_to_about()
 
     def close_slider_popup(self, target_page: Page) -> None:
-        """Close the slider / drawer popup that opens when clicking a table row/cell."""
-        target_page.wait_for_timeout(300)
-        # 1. Exact close button identified in Playwright Inspector: get_by_role('button').filter({ hasText: /^$/ }).nth(4)
-        try:
-            empty_btns = target_page.get_by_role("button").filter(has_text=re.compile(r"^$"))
-            if empty_btns.count() >= 5:
-                close_btn = empty_btns.nth(4)
-                if close_btn.is_visible(timeout=1000):
-                    close_btn.click()
+        """Close the Details slider / drawer popup that opens when clicking a table row/cell."""
+        target_page.wait_for_timeout(500)
+
+        # 1. Direct CSS selectors matching the exact DOM tree from inspection:
+        # <div class="... custom-sidebar-width ..."><button class="absolute top-1 right-4 text-gray-500 hover:text-gray-700 z-10">
+        drawer_selectors = [
+            ".custom-sidebar-width button.absolute",
+            "button.absolute.top-1.right-4",
+            ".custom-sidebar-width button:has(svg)",
+            "button:has(path[d*='M6 18L18 6'])",
+            "div.custom-sidebar-width > button",
+        ]
+        for sel in drawer_selectors:
+            try:
+                btn = target_page.locator(sel).first
+                if btn.is_visible(timeout=1000):
+                    btn.click(force=True)
                     target_page.wait_for_timeout(500)
                     return
-        except Exception:
-            pass
+            except Exception:
+                pass
 
-        # 2. Try close button on the Details panel / drawer header
+        # 2. Try clicking via evaluate in DOM directly
         try:
-            drawer_close = target_page.locator(
-                "div:has-text('Details') button, "
-                ".p-sidebar-header button, .p-sidebar-close, .slider-close, "
-                "button[aria-label*='Close' i], "
-                "button:has-text('✕'), button:has-text('×')"
-            ).first
-            if drawer_close.is_visible(timeout=1000):
-                drawer_close.click()
+            closed = target_page.evaluate("""() => {
+                const btn = document.querySelector(".custom-sidebar-width button.absolute, button.absolute.top-1.right-4, .custom-sidebar-width button");
+                if (btn) {
+                    btn.click();
+                    return true;
+                }
+                return false;
+            }""")
+            if closed:
                 target_page.wait_for_timeout(500)
                 return
         except Exception:
             pass
 
-        # 3. Dismiss via Escape key
+        # 3. Playwright Inspector exact button locator: get_by_role("button").filter(has_text=re.compile(r"^$")).nth(4)
+        try:
+            empty_btns = target_page.get_by_role("button").filter(has_text=re.compile(r"^$"))
+            if empty_btns.count() > 4:
+                btn = empty_btns.nth(4)
+                if btn.is_visible(timeout=1000):
+                    btn.click(force=True)
+                    target_page.wait_for_timeout(500)
+                    return
+        except Exception:
+            pass
+
+        # 4. Fallback: Escape key
         try:
             target_page.keyboard.press("Escape")
             target_page.wait_for_timeout(300)
