@@ -48,129 +48,157 @@ class AppBuilderPage(BasePage):
     def connect_google_account_if_prompted(self) -> None:
         """Connect Google Account and handle OAuth consent steps:
         1. Check if 'Select Your Spreadsheet' is already visible
-        2. Click 'Connect Your Google Account' if needed
-        3. page.get_by_role("link", name="chartapps chartapps.com@gmail").click()
-        4. page.get_by_role("button", name="Continue").click()
-        5. page.get_by_role("button", name="Next").click()
+        2. If 'Next' button on dashboard creation is already enabled, click it
+        3. Otherwise, click 'Connect Your Google Account' (handling popup or tab)
+        4. Select account, check consent checkboxes, click Continue/Next
+        5. Back on main page, click 'Next' to transition to spreadsheet step
+        6. Wait for 'Select Your Spreadsheet' to be visible
         """
-        # Check if Google account is already connected and spreadsheet selector is visible
+        # Step A: Check if already on Spreadsheet selection step
         select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
-        if select_sheet_btn.is_visible(timeout=3000):
-            print("[INFO] Google account already connected ('Select Your Spreadsheet' is visible). Proceeding...")
+        if select_sheet_btn.is_visible(timeout=2000):
+            print("[INFO] 'Select Your Spreadsheet' is already visible. Proceeding...")
             return
 
+        # Step B: Check if Next button on Create your dashboard is already enabled
+        next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
+        if next_btn.is_visible(timeout=2000) and next_btn.is_enabled():
+            print("[INFO] Google account already connected ('Next' is enabled). Clicking Next...")
+            next_btn.click()
+            self.page.wait_for_timeout(2000)
+            if select_sheet_btn.is_visible(timeout=5000):
+                return
+
+        # Step C: Click 'Connect Your Google Account' if visible
         connect_btn = self.page.get_by_role("button", name="Connect Your Google Account")
-        if not connect_btn.is_visible(timeout=4000):
+        if not connect_btn.is_visible(timeout=3000):
             connect_btn = self.page.locator("button:has-text('Connect Your Google Account')").first
 
         if connect_btn.is_visible(timeout=3000):
-            connect_btn.click()
-            self.page.wait_for_timeout(3000)
-
-        # Handle complete Google OAuth authentication & consent flow if on accounts.google.com
-        start_time = time.time()
-        while "accounts.google.com" in self.page.url and (time.time() - start_time) < 60:
-            # 1. Google Account Chooser link if prompted (e.g. "chartapps chartapps.com@gmail")
+            print("[INFO] Clicking 'Connect Your Google Account'...")
+            oauth_page = None
             try:
-                account_link = self.page.get_by_role("link", name=re.compile(r"chartapps.*@gmail", re.I)).or_(
-                    self.page.locator("text=chartapps.com@gmail.com, [data-email*='chartapps.com'], [data-identifier*='chartapps.com'], div[data-identifier]")
-                ).first
-                if account_link.is_visible(timeout=1500):
-                    account_link.click()
-                    self.page.wait_for_timeout(2000)
-                    continue
+                with self.page.expect_popup(timeout=3000) as popup_info:
+                    connect_btn.click()
+                oauth_page = popup_info.value
+                print(f"[INFO] Google OAuth opened in popup window: {oauth_page.url}")
             except Exception:
-                pass
-
-            # 2. Check for "This browser or app may not be secure" block
-            try:
-                secure_block = self.page.locator("text='Couldn’t sign you in', text='This browser or app may not be secure'").first
-                if secure_block.is_visible(timeout=1000):
-                    print("[WARNING] Google displayed 'Couldn't sign you in'. Attempting recovery...")
-                    try_again = self.page.locator("a:has-text('Try again'), [role='link']:has-text('Try again')").first
-                    if try_again.is_visible(timeout=1000):
-                        try_again.click()
-                        self.page.wait_for_timeout(2000)
-                        continue
-                    self.page.goto(f"{self.dashboard_url}/new-multipage", wait_until="domcontentloaded")
-                    self.page.wait_for_timeout(2000)
-                    break
-            except Exception:
-                pass
-
-            # 3. Consent Screen Checkboxes (e.g. "Select all" / Drive / Sheets permissions)
-            try:
-                checkboxes = self.page.locator("input[type='checkbox']:not(:checked)")
-                if checkboxes.count() > 0:
-                    for i in range(checkboxes.count()):
-                        cb = checkboxes.nth(i)
-                        if cb.is_visible():
-                            cb.check(force=True)
-                    self.page.wait_for_timeout(500)
-            except Exception:
-                pass
-
-            # 4. Consent Screen "Continue" button
-            try:
-                cont_btn = self.page.locator("button:has-text('Continue'), [role='button']:has-text('Continue'), div[role='button']:has-text('Continue')").first
-                if cont_btn.is_visible(timeout=1500):
-                    cont_btn.click()
-                    self.page.wait_for_timeout(2000)
-                    continue
-            except Exception:
-                pass
-
-            # 5. Consent Screen "Next" / "Allow" button
-            try:
-                next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next'), button:has-text('Allow'), [role='button']:has-text('Allow')").first
-                if next_btn.is_visible(timeout=1500):
-                    next_btn.click()
-                    self.page.wait_for_timeout(2000)
-                    continue
-            except Exception:
-                pass
-
-            # 6. Email entry only if account chooser was absent
-            try:
-                email_input = self.page.locator("input[type='email'], input#identifierId, input[name='identifier']").first
-                if email_input.is_visible(timeout=1000):
-                    email_input.fill(LoginTestData.EMAIL)
-                    self.page.wait_for_timeout(500)
-                    id_next = self.page.locator("#identifierNext, button:has-text('Next')").first
-                    if id_next.is_visible(timeout=1000):
-                        id_next.click()
-                        self.page.wait_for_timeout(2500)
-                        continue
-            except Exception:
-                pass
-
-            # 7. Password entry if prompted
-            try:
-                pwd_input = self.page.locator("input[type='password'], input[name='Passwd'], input[autocomplete='current-password']").first
-                if pwd_input.is_visible(timeout=1000):
-                    pwd_input.fill(LoginTestData.PASSWORD)
-                    self.page.wait_for_timeout(500)
-                    pwd_next = self.page.locator("#passwordNext, button:has-text('Next')").first
-                    if pwd_next.is_visible(timeout=1000):
-                        pwd_next.click()
-                        self.page.wait_for_timeout(2500)
-                        continue
-            except Exception:
-                pass
-
-            self.page.wait_for_timeout(1000)
-
-        # Wait until redirected back to ChartApps and spreadsheet button is visible
-        try:
-            select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
-            expect(select_sheet_btn).to_be_visible(timeout=30000)
-        except Exception:
-            if "accounts.google.com" in self.page.url:
-                self.page.goto(f"{self.dashboard_url}/new-multipage", wait_until="domcontentloaded")
                 self.page.wait_for_timeout(2000)
-            select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
-            expect(select_sheet_btn).to_be_visible(timeout=10000)
+                for p in self.page.context.pages:
+                    if "accounts.google.com" in p.url or "google.com" in p.url:
+                        oauth_page = p
+                        break
+                if not oauth_page:
+                    oauth_page = self.page
 
+            # Handle Google OAuth on the target oauth_page
+            start_time = time.time()
+            while (time.time() - start_time) < 45:
+                if oauth_page.is_closed():
+                    print("[INFO] Google OAuth popup closed.")
+                    break
+
+                current_url = oauth_page.url
+                if "chartapps.app" in current_url and "accounts.google.com" not in current_url:
+                    print("[INFO] Redirected back to ChartApps from Google OAuth.")
+                    break
+
+                if "accounts.google.com" in current_url:
+                    # 1. Google Account Chooser: Click existing account (e.g. "chartapps chartapps.com@gmail")
+                    try:
+                        account_link = oauth_page.get_by_role("link", name=re.compile(r"chartapps.*@gmail", re.I)).or_(
+                            oauth_page.locator("text=chartapps.com@gmail.com, [data-email*='chartapps.com'], [data-identifier*='chartapps.com'], div[data-identifier]")
+                        ).first
+                        if account_link.is_visible(timeout=1500):
+                            print("[INFO] Clicking Google account chooser link...")
+                            account_link.click()
+                            oauth_page.wait_for_timeout(2000)
+                            continue
+                    except Exception:
+                        pass
+
+                    # 2. Consent Screen Checkboxes
+                    try:
+                        checkboxes = oauth_page.locator("input[type='checkbox']:not(:checked)")
+                        if checkboxes.count() > 0:
+                            for i in range(checkboxes.count()):
+                                cb = checkboxes.nth(i)
+                                if cb.is_visible():
+                                    cb.check(force=True)
+                            oauth_page.wait_for_timeout(500)
+                    except Exception:
+                        pass
+
+                    # 3. Consent Screen "Continue" button
+                    try:
+                        cont_btn = oauth_page.locator("button:has-text('Continue'), [role='button']:has-text('Continue'), div[role='button']:has-text('Continue')").first
+                        if cont_btn.is_visible(timeout=1500):
+                            print("[INFO] Clicking 'Continue' on Google consent screen...")
+                            cont_btn.click()
+                            oauth_page.wait_for_timeout(2000)
+                            continue
+                    except Exception:
+                        pass
+
+                    # 4. Consent Screen "Next" / "Allow" button
+                    try:
+                        next_consent_btn = oauth_page.locator("button:has-text('Next'), [role='button']:has-text('Next'), button:has-text('Allow'), [role='button']:has-text('Allow')").first
+                        if next_consent_btn.is_visible(timeout=1500):
+                            print("[INFO] Clicking 'Next'/'Allow' on Google consent screen...")
+                            next_consent_btn.click()
+                            oauth_page.wait_for_timeout(2000)
+                            continue
+                    except Exception:
+                        pass
+
+                    # 5. Type email with simulated human keystrokes ONLY if account chooser was absent
+                    try:
+                        email_input = oauth_page.locator("input[type='email'], input#identifierId, input[name='identifier']").first
+                        if email_input.is_visible(timeout=1000):
+                            email_input.click()
+                            email_input.press_sequentially(LoginTestData.EMAIL, delay=80)
+                            oauth_page.wait_for_timeout(500)
+                            id_next = oauth_page.locator("#identifierNext, button:has-text('Next')").first
+                            if id_next.is_visible(timeout=1000):
+                                id_next.click()
+                                oauth_page.wait_for_timeout(2500)
+                                continue
+                    except Exception:
+                        pass
+
+                    # 6. Type password with simulated human keystrokes
+                    try:
+                        pwd_input = oauth_page.locator("input[type='password'], input[name='Passwd'], input[autocomplete='current-password']").first
+                        if pwd_input.is_visible(timeout=1000):
+                            pwd_input.click()
+                            pwd_input.press_sequentially(LoginTestData.PASSWORD, delay=80)
+                            oauth_page.wait_for_timeout(500)
+                            pwd_next = oauth_page.locator("#passwordNext, button:has-text('Next')").first
+                            if pwd_next.is_visible(timeout=1000):
+                                pwd_next.click()
+                                oauth_page.wait_for_timeout(2500)
+                                continue
+                    except Exception:
+                        pass
+
+                self.page.wait_for_timeout(1000)
+
+        # Step D: Back on main page, click 'Next' button if enabled
+        self.page.wait_for_timeout(2000)
+        next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
+        if next_btn.is_visible(timeout=5000):
+            try:
+                # Wait for Next button to become enabled after Google connection
+                expect(next_btn).to_be_enabled(timeout=20000)
+                next_btn.click()
+                print("[INFO] Clicked 'Next' button on Create dashboard.")
+                self.page.wait_for_timeout(2000)
+            except Exception as next_err:
+                print(f"[WARNING] Could not click 'Next' button: {next_err}")
+
+        # Step E: Wait until 'Select Your Spreadsheet' or 'Create Dashboard' is visible
+        select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
+        expect(select_sheet_btn).to_be_visible(timeout=30000)
         self.page.wait_for_timeout(1500)
 
     def select_google_spreadsheet(self, spreadsheet_name: str = "Regression Testing Automation") -> None:

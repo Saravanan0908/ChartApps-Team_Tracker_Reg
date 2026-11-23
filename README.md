@@ -1,6 +1,6 @@
 # ChartApps Playwright Automation Framework (POM)
 
-An enterprise-grade, clean Page Object Model (POM) test automation framework built with **Python**, **Playwright**, and **Pytest**. Features automated session management, dynamic runtime test data, real-time live step streaming, failure screenshot capture, Azure-compatible HTML reporting, and a full GitHub Actions CI/CD pipeline with scheduled auto-execution and email notifications.
+An enterprise-grade, clean Page Object Model (POM) test automation framework built with **Python**, **Playwright**, and **Pytest**. Features automated session management, dynamic runtime test data, real-time live step streaming, failure screenshot capture, Allure test reporting, and a full GitHub Actions CI/CD pipeline with scheduled auto-execution and email notifications.
 
 ---
 
@@ -32,7 +32,7 @@ ChartApps/
 │   ├── login_data.json                # Local test credentials (gitignored)
 │   └── __init__.py
 ├── tests/                             # Pytest Test Suites & Fixtures
-│   ├── conftest.py                    # Browser fixtures, failure screenshot capture & Azure report hooks
+│   ├── conftest.py                    # Browser fixtures, failure screenshot capture & Allure report hooks
 │   ├── setup_auth.py                  # One-time interactive Google login setup utility
 │   ├── test_login.py                  # Standalone login verification test
 │   ├── test_spreadsheet.py            # Spreadsheet view and session persistence test
@@ -46,7 +46,7 @@ ChartApps/
 │   ├── step_logger.py                 # Real-time console step logger and GitHub Step Summary generator
 │   └── __init__.py
 ├── reports/                           # Test Reports & Execution Artifacts (Generated automatically)
-│   ├── azure_test_report.html         # Self-contained Azure DevOps / CI HTML test report
+│   ├── allure-results/                # Allure report test execution results
 │   ├── junit_report.xml               # JUnit XML report for test run analytics
 │   ├── step_execution.json            # Machine-readable step-by-step test execution record
 │   └── screenshots/                   # Screenshots captured automatically on test failure

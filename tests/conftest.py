@@ -1,5 +1,5 @@
 """Pytest fixtures configuration supporting both fresh and persistent sessions,
-with automatic failure screenshot capture and Azure HTML test reporting.
+with automatic failure screenshot capture and Allure test reporting.
 """
 
 import os
@@ -74,10 +74,9 @@ def app_builder_page(persistent_page: Page) -> AppBuilderPage:
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """Capture screenshot on scenario failure and attach to Azure HTML report."""
+    """Capture screenshot on scenario failure and attach directly to Allure report."""
     outcome = yield
     report = outcome.get_result()
-    extras = getattr(report, "extras", [])
 
     if report.when == "call" and report.failed:
         page = item.funcargs.get("persistent_page") or item.funcargs.get("page")
@@ -88,17 +87,22 @@ def pytest_runtest_makereport(item, call):
             screenshot_path = reports_dir / screenshot_name
             try:
                 page.screenshot(path=str(screenshot_path))
-                from pytest_html import extras as html_extras
-                extras.append(html_extras.image(str(screenshot_path), name="Failure Screenshot"))
-                extras.append(html_extras.html(f"<div style='color:#e53e3e;font-weight:bold;margin:5px 0;'>❌ Scenario Failed: {item.name}</div>"))
+                try:
+                    import allure
+                    allure.attach.file(
+                        str(screenshot_path),
+                        name=f"Failure Screenshot - {item.name}",
+                        attachment_type=allure.attachment_type.PNG,
+                    )
+                except Exception:
+                    pass
             except Exception:
                 pass
-        report.extras = extras
 
 
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
-    """Automatically process failure videos/clean passed videos and open report if tests fail."""
+    """Automatically process failure videos/clean passed videos and report Allure results."""
     if session.testsfailed == 0 and exitstatus == 0:
         try:
             from utils.video_helper import clean_passed_videos
@@ -116,17 +120,8 @@ def pytest_sessionfinish(session, exitstatus):
         except Exception as e:
             print(f"[WARNING] Could not process failure video in sessionfinish: {e}")
 
-    # Check if any test in the session failed
-    if session.testsfailed > 0 or exitstatus != 0:
-        report_path = Path("reports/azure_test_report.html").resolve()
-        if report_path.exists():
-            print(f"\n" + "=" * 70)
-            print(f"[TEST FAILURE DETECTED] {session.testsfailed} scenario(s) failed.")
-            print(f"[INFO] Automatically opening Azure HTML Report: {report_path}")
-            print("=" * 70)
-            try:
-                import os
-                if not os.environ.get("CI"):
-                    webbrowser.open(report_path.as_uri())
-            except Exception as e:
-                print(f"[WARNING] Could not automatically open browser: {e}")
+    allure_dir = Path("reports/allure-results").resolve()
+    print(f"\n" + "=" * 70)
+    print(f"[ALLURE] Allure report results available in: {allure_dir}")
+    print(f"[ALLURE] Run 'allure serve reports/allure-results' to view.")
+    print("=" * 70)

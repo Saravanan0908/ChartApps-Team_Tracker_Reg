@@ -124,18 +124,17 @@ jobs:
           if ($env:TARGET_SCENARIO -eq "new_app") { $marker = "new_app" }
           Write-Host "Executing Regression Suite with marker: $marker (Target: $env:TARGET_SCENARIO)"
           python -m pytest -m $marker -s -v `
-            --html=reports/azure_test_report.html `
-            --self-contained-html `
+            --alluredir=reports/allure-results `
             --junitxml=reports/junit_report.xml
 
-      # 9. Upload HTML reports and screenshots
+      # 9. Upload Allure results and screenshots
       - name: Publish Test Reports & Failure Screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ChartApps-Test-Reports
           path: |
-            reports/azure_test_report.html
+            reports/allure-results/
             reports/junit_report.xml
             reports/screenshots/
             reports/videos/

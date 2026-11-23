@@ -354,11 +354,9 @@ def run_standalone(target_scenario: str = "all") -> None:
             except Exception as vid_err:
                 print(f"[WARNING] Could not process failure video: {vid_err}")
 
-            report_path = Path("reports/azure_test_report.html").resolve()
-            if report_path.exists():
-                print(f"[INFO] Report generated: {report_path}")
-                if not os.environ.get("CI"):
-                    webbrowser.open(report_path.as_uri())
+            allure_dir = Path("reports/allure-results").resolve()
+            if allure_dir.exists():
+                print(f"[INFO] Allure results recorded in: {allure_dir}")
             raise e
         finally:
             try:

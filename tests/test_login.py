@@ -51,12 +51,9 @@ def run_standalone() -> None:
                 print(f"[INFO] Failure screenshot captured: {screenshot_path}")
             except Exception:
                 pass
-            report_path = Path("reports/azure_test_report.html").resolve()
-            if report_path.exists():
-                print(f"[INFO] Report generated: {report_path}")
-                import os
-                if not os.environ.get("CI"):
-                    webbrowser.open(report_path.as_uri())
+            allure_dir = Path("reports/allure-results").resolve()
+            if allure_dir.exists():
+                print(f"[INFO] Allure results recorded in: {allure_dir}")
             raise e
         finally:
             context.close()
