@@ -159,7 +159,7 @@ class AppBuilderPage(BasePage):
         slug: str = "about",
         sheet: str = "Regression Submition",
     ) -> None:
-        """Add a new page in editor mode with designated details sheet."""
+        """Add a new page in editor mode with designated details sheet, handling 'Error Loading sheet' recovery."""
         pages_item = self.page.locator("li:has-text('Pages'), [name='Pages']").first
         pages_item.click()
         self.page.wait_for_timeout(1000)
@@ -177,15 +177,57 @@ class AppBuilderPage(BasePage):
         slug_input.click()
         slug_input.fill(slug)
 
-        # Select sheet for details page
+        # Check if 'Error Loading sheet' is displayed or target sheet not loaded in dropdown
         sheet_selector = self.page.get_by_label("Select sheet for details page")
+        has_error = False
+        try:
+            options_text = " ".join(sheet_selector.locator("option").all_inner_texts())
+            if "Error Loading" in options_text or "Error loading" in options_text or sheet not in options_text:
+                has_error = True
+        except Exception:
+            pass
+
+        if not has_error:
+            try:
+                if self.page.locator("text=Error Loading sheet, text=Error loading").is_visible(timeout=1000):
+                    has_error = True
+            except Exception:
+                pass
+
+        if has_error:
+            # When dropdown shows 'Error Loading sheet', refresh the page and re-attempt page creation
+            self.page.reload(wait_until="domcontentloaded")
+            self.page.wait_for_timeout(3000)
+
+            pages_item = self.page.locator("li:has-text('Pages'), [name='Pages']").first
+            pages_item.click()
+            self.page.wait_for_timeout(1500)
+
+            self.page.get_by_role("button", name="Add").click()
+            self.page.wait_for_timeout(1500)
+
+            page_name_input = self.page.get_by_role("textbox", name=AppBuilderLocators.PAGE_NAME_INPUT)
+            page_name_input.click()
+            page_name_input.fill(page_name)
+
+            slug_input = self.page.get_by_role("textbox", name=AppBuilderLocators.URL_SLUG_INPUT)
+            slug_input.click()
+            slug_input.fill(slug)
+
+            sheet_selector = self.page.get_by_label("Select sheet for details page")
+            self.page.wait_for_timeout(1000)
+
+        # Select sheet for details page
         sheet_selector.select_option(sheet)
+        self.page.wait_for_timeout(500)
 
         # Save and close
         self.page.get_by_role("button", name="Save").click()
-        self.page.wait_for_timeout(1000)
-        self.page.get_by_role("button", name="Close").click()
-        self.page.wait_for_timeout(1000)
+        self.page.wait_for_timeout(1500)
+        close_btn = self.page.get_by_role("button", name="Close")
+        if close_btn.is_visible(timeout=2000):
+            close_btn.click()
+            self.page.wait_for_timeout(1000)
 
     def configure_header_navigation(self) -> None:
         """Configure Header navigation bar to link to the new page."""
@@ -270,27 +312,29 @@ class AppBuilderPage(BasePage):
 
     def close_slider_popup(self, target_page: Page) -> None:
         """Close the slider / drawer popup that opens when clicking a table row/cell."""
-        target_page.wait_for_timeout(500)
-        # 1. Try finding close button on slider/drawer
-        try:
-            close_btn = target_page.locator(
-                "button[aria-label*='Close' i], "
-                ".p-sidebar-close, .slider-close, .drawer-close, "
-                "[role='dialog'] button:has-text('Close'), "
-                "button:has-text('✕'), button:has-text('×')"
-            ).first
-            if close_btn.is_visible(timeout=1000):
-                close_btn.click()
-                target_page.wait_for_timeout(500)
-                return
-        except Exception:
-            pass
-
-        # 2. Try the empty icon buttons recorded in codegen
+        target_page.wait_for_timeout(300)
+        # 1. Exact close button identified in Playwright Inspector: get_by_role('button').filter({ hasText: /^$/ }).nth(4)
         try:
             empty_btns = target_page.get_by_role("button").filter(has_text=re.compile(r"^$"))
             if empty_btns.count() >= 5:
-                empty_btns.nth(4).click()
+                close_btn = empty_btns.nth(4)
+                if close_btn.is_visible(timeout=1000):
+                    close_btn.click()
+                    target_page.wait_for_timeout(500)
+                    return
+        except Exception:
+            pass
+
+        # 2. Try close button on the Details panel / drawer header
+        try:
+            drawer_close = target_page.locator(
+                "div:has-text('Details') button, "
+                ".p-sidebar-header button, .p-sidebar-close, .slider-close, "
+                "button[aria-label*='Close' i], "
+                "button:has-text('✕'), button:has-text('×')"
+            ).first
+            if drawer_close.is_visible(timeout=1000):
+                drawer_close.click()
                 target_page.wait_for_timeout(500)
                 return
         except Exception:
@@ -304,7 +348,7 @@ class AppBuilderPage(BasePage):
             pass
 
     def select_date_picker_value(self, target_page: Page, selected_date: str) -> str:
-        """Select current date in the form date picker via calendar popup, day cell, and input events."""
+        """Select current date in the form date picker via calendar popup and day cell click."""
         now = datetime.now()
         month_name = now.strftime("%B")
         day_num = now.day
@@ -317,53 +361,42 @@ class AppBuilderPage(BasePage):
             d_input = target_page.locator("input[placeholder*='yyyy-mm-dd'], input.flatpickr-input, input[name='Date']").first
 
         if d_input.is_visible(timeout=3000):
-            # 1. Click textbox to open calendar popup
+            # 1. Click textbox once to open calendar popup
             d_input.click()
             target_page.wait_for_timeout(500)
 
-            # 2. Click current day cell in the calendar overlay
+            # 2. Click current day cell in the calendar overlay (which automatically selects date and closes popup)
+            day_selected = False
             try:
                 day_cell = target_page.get_by_label(day_pattern)
                 if day_cell.first.is_visible(timeout=2000):
                     day_cell.first.click()
+                    day_selected = True
                     target_page.wait_for_timeout(500)
                 else:
                     today_cell = target_page.locator(".flatpickr-day.today, .today, .p-datepicker-today, [aria-current='date']").first
                     if today_cell.is_visible(timeout=1000):
                         today_cell.click()
+                        day_selected = True
                         target_page.wait_for_timeout(500)
             except Exception:
                 pass
 
-            # 3. Fill date value directly to ensure exact formatting
-            try:
-                d_input.fill(selected_date)
-            except Exception:
-                pass
+            # CRITICAL: DO NOT call d_input.fill() if day was already selected from popup!
+            # Calling d_input.fill() clicks the date input again and causes the calendar popup to re-open over Title!
+            if not day_selected:
+                try:
+                    d_input.fill(selected_date)
+                    target_page.wait_for_timeout(300)
+                except Exception:
+                    pass
 
-            # 4. Dispatch DOM events so Vue reactive listeners update
+            # 3. Dismiss calendar popup if still visible so it closes before typing Title
             try:
-                target_page.evaluate(
-                    """([val]) => {
-                        const inputs = document.querySelectorAll("input[placeholder*='yyyy-mm-dd'], input.flatpickr-input, input[name='Date'], input[type='text']");
-                        for (const el of inputs) {
-                            if (el.placeholder && el.placeholder.includes("yyyy-mm-dd") || el.classList.contains("flatpickr-input")) {
-                                el.value = val;
-                                el.dispatchEvent(new Event('input', {bubbles: true}));
-                                el.dispatchEvent(new Event('change', {bubbles: true}));
-                                break;
-                            }
-                        }
-                    }""",
-                    [selected_date]
-                )
-            except Exception:
-                pass
-
-            # 5. Dismiss calendar popup so it closes before typing Title
-            try:
-                target_page.keyboard.press("Escape")
-                target_page.wait_for_timeout(300)
+                cal_popup = target_page.locator(".p-datepicker, .flatpickr-calendar.open, .calendar-popup")
+                if cal_popup.is_visible(timeout=500):
+                    target_page.keyboard.press("Escape")
+                    target_page.wait_for_timeout(300)
             except Exception:
                 pass
 
