@@ -14,13 +14,23 @@ import smtplib
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+# Ensure project root is in sys.path so 'utils.*' imports work from anywhere
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime
-from utils.video_helper import find_videos, trim_video_to_last_n_seconds, clean_passed_videos
+
+try:
+    from utils.video_helper import find_videos, trim_video_to_last_n_seconds, clean_passed_videos
+except ImportError:
+    from video_helper import find_videos, trim_video_to_last_n_seconds, clean_passed_videos
 
 
 def get_git_info() -> dict:
