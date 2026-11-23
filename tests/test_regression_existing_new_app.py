@@ -180,40 +180,44 @@ def test_02_new_app_creation_and_end_user_flow(persistent_page: Page) -> None:
         builder_page.configure_header_navigation()
         logger.passed(7, "Header navigation updated")
 
-        # Step 8: Add Blocks to Pages
-        logger.step(8, "Add Form & Table Blocks", "Adding Form block to Home page and Table block to About page")
-        builder_page.add_blocks_to_editor()
-        logger.passed(8, "Blocks added and axes configured")
-
-        # Step 9: Submit Form in Editor Mode
-        logger.step(9, "Submit Form in Editor Mode", f"Submitting record: '{data['editor_text'][:35]}...'")
+        # Step 8: Add Form Block & Submit in Editor Mode
+        logger.step(8, "Add Form Block & Submit in Editor Mode", f"Adding Form Block on Home, configuring Date axis, and submitting record: '{data['editor_text'][:35]}...'")
+        builder_page.add_form_block_to_home()
         builder_page.submit_form_in_editor(
-            datetime_str=data["editor_datetime"],
             date_str=data["editor_date"],
             text_val=data["editor_text"],
+            datetime_str=data.get("editor_datetime"),
         )
-        logger.passed(9, "Form submitted successfully in editor mode")
+        logger.passed(8, "Form block configured and data submitted in editor mode")
+
+        # Step 9: Add Table Block to About Page
+        logger.step(9, "Add Table Block to About Page", "Navigating to About page, adding Table block, and configuring teal styling")
+        builder_page.add_table_block_to_about()
+        logger.passed(9, "Table block added to About page")
 
         # Step 10: Verify Data in About Table
-        logger.step(10, "Verify Stored Data in Table", "Checking About page table for the newly submitted record")
-        builder_page.verify_record_in_about_table(expected_snippet="Regression Testing is")
+        logger.step(10, "Verify Stored Data in Table", "Asserting submitted Editor Mode record appears in About page table")
+        builder_page.verify_table_contains_details(
+            date_str=data["editor_date"],
+            expected_snippet="Editor Mode: This message for Regression Testing",
+        )
         logger.passed(10, "Submitted record confirmed in About page table")
 
         # Step 11: Publish App & Set Privacy
-        logger.step(11, "Publish App and Set Privacy", "Publishing app and retrieving public URL")
+        logger.step(11, "Publish App and Set Privacy", "Publishing app, making App Privacy switch active, and retrieving public URL")
         public_url = builder_page.publish_and_get_public_url()
         logger.passed(11, f"App published: {public_url}")
 
         # Step 12: End-User Submission & Cleanup
-        logger.step(12, "End-User Verification & Cleanup", "Testing public app as end-user in fresh context, then deleting app")
+        logger.step(12, "End-User Verification & Cleanup", "Testing public app in fresh incognito context without cookies/caches, verifying Table, and deleting app")
         builder_page.submit_and_verify_as_end_user(
             public_url=public_url,
             date_str=data["enduser_date"],
             text_val=data["enduser_text"],
-            context=builder_page.page.context,
+            browser=builder_page.page.context.browser,
         )
         builder_page.delete_app_and_cleanup(app_name=app_name)
-        logger.passed(12, "End-user flow verified and test app cleaned up successfully")
+        logger.passed(12, "End-user flow verified in isolated incognito context and test app cleaned up successfully")
 
     except Exception as exc:
         failed_step = len(logger.steps_record) + 1

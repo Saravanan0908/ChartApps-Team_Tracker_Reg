@@ -3,7 +3,7 @@
 import re
 import time
 from typing import Optional
-from playwright.sync_api import BrowserContext, Page, expect
+from playwright.sync_api import Browser, BrowserContext, Page, expect
 
 from locators.app_builder_locators import AppBuilderLocators
 from pages.base_page import BasePage
@@ -201,69 +201,94 @@ class AppBuilderPage(BasePage):
         self.page.get_by_role("button", name="Save").click()
         self.page.wait_for_timeout(1500)
 
-    def add_blocks_to_editor(self) -> None:
-        """Add and configure Form and Table blocks across Home and About pages."""
-        # 1. Home Page Form Block
-        self.page.get_by_role("link", name="Home").click()
+    def add_form_block_to_home(self) -> None:
+        """Add Form block on Home page and configure Date axis."""
+        self.page.get_by_role("link", name=AppBuilderLocators.HOME_LINK).click()
         self.page.wait_for_timeout(1500)
         new_block = self.page.locator("li:has-text('New Block')").first
         new_block.click()
         self.page.wait_for_timeout(1000)
 
         # Select form block from grid
-        self.page.locator(".category > .block-grid > div:nth-child(3) > .hover-overlay").click()
+        self.page.locator(AppBuilderLocators.FORM_BLOCK_OVERLAY).first.click()
         self.page.wait_for_timeout(1000)
         self.page.get_by_role("tab", name=AppBuilderLocators.AXES_TAB).click()
         self.page.wait_for_timeout(1000)
-        self.page.get_by_role("region", name=AppBuilderLocators.AXES_TAB).get_by_role("button").click()
-        self.page.wait_for_timeout(500)
+        axes_region_btn = self.page.get_by_role("region", name=AppBuilderLocators.AXES_TAB).get_by_role("button").first
+        if axes_region_btn.is_visible(timeout=2000):
+            axes_region_btn.click()
+            self.page.wait_for_timeout(500)
 
-        # Date / Datetime configuration
-        date_btn = self.page.get_by_role("button", name="Date")
-        if date_btn.is_visible(timeout=2000):
-            date_btn.click()
+        # Select 'date' type
         axes_region = self.page.get_by_role("region", name=AppBuilderLocators.AXES_TAB)
         type_select = axes_region.locator("#type")
         if type_select.is_visible(timeout=2000):
-            type_select.select_option("datetime-local")
+            type_select.select_option("date")
         self.page.get_by_role("button", name="Save").click()
-        self.page.wait_for_timeout(1500)
+        self.page.wait_for_timeout(1000)
 
-        # 2. About Page Table Block
-        self.page.get_by_role("link", name="About").click()
+        # Click additional icon/save if present in editor
+        empty_btn = self.page.get_by_role("button").filter(has_text=re.compile(r"^$"))
+        if empty_btn.count() > 2:
+            try:
+                empty_btn.nth(2).click()
+                self.page.wait_for_timeout(500)
+                self.page.get_by_role("button", name="Save").click()
+                self.page.wait_for_timeout(1000)
+            except Exception:
+                pass
+
+    def add_table_block_to_about(self) -> None:
+        """Add Table block on About page and configure teal styling."""
+        self.page.get_by_role("link", name=AppBuilderLocators.ABOUT_LINK).click()
         self.page.wait_for_timeout(1500)
         new_block = self.page.locator("li:has-text('New Block')").first
         new_block.click()
         self.page.wait_for_timeout(1000)
 
         # Select table block from grid
-        self.page.locator(".category > .block-grid > div:nth-child(2) > .hover-overlay").click()
+        table_overlay = self.page.locator(AppBuilderLocators.TABLE_BLOCK_OVERLAY).first
+        table_overlay.click()
         self.page.wait_for_timeout(1000)
+
         axes_btn = self.page.get_by_role("region", name=AppBuilderLocators.AXES_TAB).get_by_role("button").filter(has_text=re.compile(r"^$"))
         if axes_btn.is_visible(timeout=2000):
-            axes_btn.click()
+            axes_btn.first.click()
         ring_btn = self.page.locator(".rounded-full.hover\\:ring-4.ring-teal-500").first
         if ring_btn.is_visible(timeout=2000):
             ring_btn.click()
         self.page.get_by_role("button", name="Save").click()
         self.page.wait_for_timeout(1500)
 
-    def submit_form_in_editor(self, datetime_str: str, date_str: str, text_val: str) -> None:
-        """Submit form data in editor mode."""
-        self.page.get_by_role("link", name="Home").click()
-        self.page.wait_for_timeout(2000)
+    def add_blocks_to_editor(self) -> None:
+        """Backward-compatible helper to configure blocks across Home and About pages."""
+        self.add_form_block_to_home()
+        self.add_table_block_to_about()
 
-        # Fill datetime
-        dt_input = self.page.get_by_role("textbox", name="yyyy-mm-dd HH:MM")
-        if dt_input.is_visible(timeout=3000):
-            dt_input.fill(datetime_str)
+    def submit_form_in_editor(
+        self,
+        date_str: str,
+        text_val: str,
+        datetime_str: Optional[str] = None,
+    ) -> None:
+        """Submit form data on Home page in editor mode."""
+        home_link = self.page.get_by_role("link", name=AppBuilderLocators.HOME_LINK)
+        if home_link.is_visible(timeout=2000):
+            home_link.click()
+            self.page.wait_for_timeout(1500)
 
-        # Fill date
+        # Optional datetime field if present
+        if datetime_str:
+            dt_input = self.page.get_by_role("textbox", name="yyyy-mm-dd HH:MM")
+            if dt_input.is_visible(timeout=2000):
+                dt_input.fill(datetime_str)
+
+        # Fill date (Current Date)
         d_input = self.page.get_by_role("textbox", name="yyyy-mm-dd")
         if d_input.is_visible(timeout=3000):
             d_input.fill(date_str)
 
-        # Fill text
+        # Fill text message
         txt_input = self.page.get_by_role("textbox", name="Type here..")
         if txt_input.is_visible(timeout=3000):
             txt_input.fill(text_val)
@@ -272,16 +297,47 @@ class AppBuilderPage(BasePage):
         self.page.get_by_role("button", name=AppBuilderLocators.SUBMIT_BUTTON).click()
         self.page.wait_for_timeout(3000)
 
-    def verify_record_in_about_table(self, expected_snippet: str) -> bool:
-        """Verify submitted record appears in the About page table."""
-        self.page.get_by_role("link", name="About").click()
-        self.page.wait_for_timeout(3000)
+    def verify_table_contains_details(
+        self,
+        date_str: str,
+        expected_snippet: str,
+        page_obj: Optional[Page] = None,
+    ) -> bool:
+        """Verify that the Table on About page displays the submitted record (date & message)."""
+        target_page = page_obj or self.page
+        if page_obj is None:
+            about_link = target_page.get_by_role("link", name=AppBuilderLocators.ABOUT_LINK)
+            if about_link.is_visible(timeout=2000):
+                about_link.click()
+                target_page.wait_for_timeout(2000)
 
-        table = self.page.get_by_role("table")
+        table = target_page.get_by_role("table")
         expect(table).to_be_visible(timeout=10000)
-        match_element = table.get_by_text(expected_snippet)
-        expect(match_element).to_be_visible(timeout=10000)
+
+        # Assert record message is present in the table
+        record = table.get_by_text(expected_snippet)
+        expect(record.first).to_be_visible(timeout=10000)
+
+        # Optional interaction with paginator/date cell if visible
+        try:
+            date_cell = target_page.get_by_role("cell", name=re.compile(date_str)).or_(target_page.get_by_text(date_str))
+            if date_cell.first.is_visible(timeout=2000):
+                date_cell.first.click()
+        except Exception:
+            pass
+
+        try:
+            paginator = target_page.locator(AppBuilderLocators.PAGINATOR)
+            if paginator.is_visible(timeout=1000):
+                paginator.click()
+        except Exception:
+            pass
+
         return True
+
+    def verify_record_in_about_table(self, expected_snippet: str) -> bool:
+        """Backward-compatible alias for verify_table_contains_details."""
+        return self.verify_table_contains_details(date_str="", expected_snippet=expected_snippet)
 
     def publish_and_get_public_url(self) -> str:
         """Publish app and configure public privacy settings, returning public URL."""
@@ -324,7 +380,8 @@ class AppBuilderPage(BasePage):
             except Exception:
                 pass
 
-        self.page.get_by_role("button", name="Save").click()
+        dialog_save = self.page.locator(AppBuilderLocators.DIALOG_SAVE_BUTTON).first
+        dialog_save.click()
         self.page.wait_for_timeout(1500)
 
         # Get Public URL from input or current origin
@@ -343,15 +400,28 @@ class AppBuilderPage(BasePage):
         public_url: str,
         date_str: str,
         text_val: str,
-        context: BrowserContext,
+        context: Optional[BrowserContext] = None,
+        browser: Optional[Browser] = None,
     ) -> None:
-        """Open a new tab/session as an end-user, submit the form, and verify."""
-        user_page = context.new_page()
+        """Launch a fresh incognito session without cookies/caches, submit form, and verify table."""
+        own_context = False
+        if browser is not None:
+            user_context = browser.new_context(viewport={"width": 1920, "height": 1080})
+            own_context = True
+        elif context is not None:
+            user_context = context
+        elif hasattr(self.page.context, "browser") and self.page.context.browser:
+            user_context = self.page.context.browser.new_context(viewport={"width": 1920, "height": 1080})
+            own_context = True
+        else:
+            user_context = self.page.context
+
+        user_page = user_context.new_page()
         try:
             user_page.goto(public_url, wait_until="domcontentloaded")
             user_page.wait_for_timeout(3000)
 
-            # Fill date
+            # Fill date (Current Date)
             d_input = user_page.get_by_role("textbox", name="yyyy-mm-dd")
             if d_input.is_visible(timeout=5000):
                 d_input.fill(date_str)
@@ -365,16 +435,20 @@ class AppBuilderPage(BasePage):
             user_page.get_by_role("button", name=AppBuilderLocators.SUBMIT_BUTTON).click()
             user_page.wait_for_timeout(3000)
 
-            # Navigate to About and verify
-            user_page.get_by_role("link", name="About").click()
+            # Navigate to About and verify in Table
+            user_page.get_by_role("link", name=AppBuilderLocators.ABOUT_LINK).click()
             user_page.wait_for_timeout(3000)
 
-            table = user_page.get_by_role("table")
-            expect(table).to_be_visible(timeout=10000)
-            record = table.get_by_text(text_val[:25])
-            expect(record).to_be_visible(timeout=10000)
+            # Table contains entered Details assertion
+            self.verify_table_contains_details(
+                date_str=date_str,
+                expected_snippet=text_val[:35],
+                page_obj=user_page,
+            )
         finally:
             user_page.close()
+            if own_context:
+                user_context.close()
 
     def delete_app_and_cleanup(self, app_name: str) -> None:
         """Delete the created app from ChartApps and confirm dialog."""

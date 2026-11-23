@@ -32,7 +32,7 @@ class NewAppTestData:
             "details_sheet": "Regression Submition",
             "editor_datetime": f"{date_iso} {time_hm}",
             "editor_date": date_iso,
-            "editor_text": f"Regression Testing is completed in Editor Mode - {time_hms}",
+            "editor_text": f"Editor Mode: This message for Regression Testing under Editor Mode [{date_iso} | {time_hms}]",
             "enduser_date": date_iso,
-            "enduser_text": f"This is from the end user access form submition - {time_hms}",
+            "enduser_text": f"EndUser Mode: This message for Regression Testing under EndUser Mode [{date_iso} | {time_hms}]",
         }

@@ -49,6 +49,10 @@ class AppBuilderLocators:
     AXES_TAB = re.compile(r"Axes", re.IGNORECASE)
     DATE_BUTTON = "Date"
     TITLE_BUTTON = "Title"
+    FORM_BLOCK_OVERLAY = ".category > .block-grid > div:nth-child(3) > .hover-overlay"
+    TABLE_BLOCK_OVERLAY = ".category > .block-grid > div:nth-child(2) > .hover-overlay > .add-icon, .category > .block-grid > div:nth-child(2) > .hover-overlay"
+    PAGINATOR = ".p-paginator"
+    DIALOG_SAVE_BUTTON = "[role='dialog'] button:has-text('Save'), button:has-text('Save')"
 
     # Editor Form Submission & Table Verification
     DATETIME_INPUT = re.compile(r"yyyy-mm-dd HH:MM", re.IGNORECASE)
