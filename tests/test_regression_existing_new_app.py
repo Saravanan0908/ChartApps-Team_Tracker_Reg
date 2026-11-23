@@ -1,8 +1,9 @@
-"""ChartApps Complete Regression Suite.
+"""ChartApps Complete Regression Suite: Existing & New App Workflows.
 
-Executes 2 core regression scenarios in order:
-Scenario 1: Existing App - Team Tracker Form Submission and Spreadsheet Data Storage.
-Scenario 2: New App Creation - Builder Setup, Blocks Configuration, Form Submission, End-User Verification, and App Cleanup.
+Supports tag-based and sequential scenario execution:
+Scenario 1 (tag: existing_app): Existing App - Team Tracker Form Submission and Spreadsheet Data Storage.
+Scenario 2 (tag: new_app):      New App - Creation, Google OAuth & Consent, Spreadsheet Selection,
+                                Details Page, Blocks Configuration, Form Submission, End-User Verification, and Cleanup.
 """
 
 import os
@@ -30,9 +31,10 @@ from utils.step_logger import StepLogger
 # ==============================================================================
 
 @pytest.mark.regression
+@pytest.mark.existing_app
 def test_01_existing_app_team_tracker_regression(persistent_page: Page) -> None:
     """Scenario 1: Regression test on existing Team Tracker app."""
-    logger = StepLogger(suite_name="Scenario 1: Team Tracker Regression", total_steps=11)
+    logger = StepLogger(suite_name="Scenario 1: Existing App (Team Tracker)", total_steps=11)
     logger.start_suite()
 
     if isinstance(persistent_page, TeamTrackerPage):
@@ -114,15 +116,12 @@ def test_01_existing_app_team_tracker_regression(persistent_page: Page) -> None:
         logger.finish_suite()
 
 
-# Alias for backwards compatibility if called directly
-existing_app_regression_scenario = test_01_existing_app_team_tracker_regression
-
-
 # ==============================================================================
 # SCENARIO 2: NEW APP CREATION & WORKFLOW VERIFICATION
 # ==============================================================================
 
 @pytest.mark.regression
+@pytest.mark.new_app
 def test_02_new_app_creation_and_end_user_flow(persistent_page: Page) -> None:
     """Scenario 2: Create a new app, configure pages and blocks, submit form, verify as end-user, and cleanup."""
     logger = StepLogger(suite_name="Scenario 2: New App Creation & Workflow", total_steps=12)
@@ -148,10 +147,10 @@ def test_02_new_app_creation_and_end_user_flow(persistent_page: Page) -> None:
         builder_page.initiate_create_app(app_name=app_name, app_slug=app_slug)
         logger.passed(2, "App name and subdomain filled")
 
-        # Step 3: Google Account Connection
-        logger.step(3, "Connect Google Account", "Validating or establishing Google Account connection")
+        # Step 3: Google Account Connection & Consent
+        logger.step(3, "Connect Google Account & Handle Consent", "Authenticating and accepting OAuth consent prompts (Continue / Next)")
         builder_page.connect_google_account_if_prompted()
-        logger.passed(3, "Google Account authenticated")
+        logger.passed(3, "Google Account authenticated and consent granted")
 
         # Step 4: Select Spreadsheet
         logger.step(4, "Select Google Spreadsheet", f"Selecting '{data['spreadsheet_name']}' via Google Picker")
@@ -228,10 +227,12 @@ def test_02_new_app_creation_and_end_user_flow(persistent_page: Page) -> None:
 # STANDALONE EXECUTION RUNNER
 # ==============================================================================
 
-def run_standalone() -> None:
-    """Execute both regression scenarios sequentially in standalone mode."""
+def run_standalone(target_scenario: str = "all") -> None:
+    """Execute regression scenarios sequentially or by target filter in standalone mode."""
+    target_scenario = (os.environ.get("SCENARIO") or target_scenario).lower()
+
     print("=" * 75)
-    print(f"Executing Full ChartApps Regression Suite (Headless: {HEADLESS})")
+    print(f"Executing ChartApps Regression Suite (Scenario: {target_scenario.upper()} | Headless: {HEADLESS})")
     print("=" * 75)
 
     with sync_playwright() as playwright:
@@ -241,27 +242,29 @@ def run_standalone() -> None:
             headless=HEADLESS,
         )
         try:
-            # 1. Execute Scenario 1: Existing App
-            print("\n" + "#" * 60)
-            print(">>> SCENARIO 1: EXISTING APP (TEAM TRACKER) <<<")
-            print("#" * 60)
-            test_01_existing_app_team_tracker_regression(page)
-            print("[SUCCESS] Scenario 1 Passed Successfully!\n")
+            # 1. Execute Scenario 1: Existing App (if requested)
+            if target_scenario in ("all", "existing", "existing_app"):
+                print("\n" + "#" * 60)
+                print(">>> SCENARIO 1: EXISTING APP (TEAM TRACKER) <<<")
+                print("#" * 60)
+                test_01_existing_app_team_tracker_regression(page)
+                print("[SUCCESS] Scenario 1 Passed Successfully!\n")
 
-            # 2. Execute Scenario 2: New App Creation & Workflow
-            print("\n" + "#" * 60)
-            print(">>> SCENARIO 2: NEW APP CREATION & WORKFLOW <<<")
-            print("#" * 60)
-            test_02_new_app_creation_and_end_user_flow(page)
-            print("[SUCCESS] Scenario 2 Passed Successfully!\n")
+            # 2. Execute Scenario 2: New App Creation & Workflow (if requested)
+            if target_scenario in ("all", "new", "new_app"):
+                print("\n" + "#" * 60)
+                print(">>> SCENARIO 2: NEW APP CREATION & WORKFLOW <<<")
+                print("#" * 60)
+                test_02_new_app_creation_and_end_user_flow(page)
+                print("[SUCCESS] Scenario 2 Passed Successfully!\n")
 
             print("\n" + "=" * 75)
-            print("[COMPLETE] ALL REGRESSION SCENARIOS PASSED SUCCESSFULLY!")
+            print("[COMPLETE] ALL REQUESTED REGRESSION SCENARIOS PASSED SUCCESSFULLY!")
             print("=" * 75)
 
             # Local Debugging Pause / CodeGen
             if not os.environ.get("CI"):
-                print("\n[INFO] Both scenarios completed. Opening Playwright Inspector for manual debugging...")
+                print("\n[INFO] Tests completed. Opening Playwright Inspector for manual debugging...")
                 page.pause()
 
         except Exception as e:
@@ -286,4 +289,5 @@ def run_standalone() -> None:
 
 
 if __name__ == "__main__":
-    run_standalone()
+    cli_arg = sys.argv[1] if len(sys.argv) > 1 else "all"
+    run_standalone(cli_arg)

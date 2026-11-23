@@ -20,6 +20,16 @@ on:
     - cron: '30 12 * * *'
 
   workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Select Scenario to Run (all = both in order, existing_app = Team Tracker only, new_app = New App only)'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - existing_app
+          - new_app
 
 permissions:
   contents: read
@@ -106,11 +116,16 @@ jobs:
         env:
           CHARTAPPS_EMAIL: ${{ secrets.CHARTAPPS_EMAIL }}
           CHARTAPPS_PASSWORD: ${{ secrets.CHARTAPPS_PASSWORD }}
+          TARGET_SCENARIO: ${{ github.event.inputs.scenario || 'all' }}
           CI: "true"
           PYTHONUNBUFFERED: "1"
           PYTHONIOENCODING: "utf-8"
         run: |
-          python -m pytest -m regression -s -v `
+          $marker = "regression"
+          if ($env:TARGET_SCENARIO -eq "existing_app") { $marker = "existing_app" }
+          if ($env:TARGET_SCENARIO -eq "new_app") { $marker = "new_app" }
+          Write-Host "Executing Regression Suite with marker: $marker (Target: $env:TARGET_SCENARIO)"
+          python -m pytest -m $marker -s -v `
             --html=reports/azure_test_report.html `
             --self-contained-html `
             --junitxml=reports/junit_report.xml

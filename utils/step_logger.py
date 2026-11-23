@@ -81,21 +81,65 @@ class StepLogger:
         safe_print(f"[SUMMARY] {passed_count} Passed | {failed_count} Failed | Elapsed: {elapsed}s", flush=True)
         safe_print(f"{'=' * 75}\n", flush=True)
 
-        # Save step execution record to json for email notification
+        # Save step execution record to json for email notification (multi-scenario cumulative support)
         try:
             reports_dir = Path("reports")
             reports_dir.mkdir(parents=True, exist_ok=True)
-            with open(reports_dir / "step_execution.json", "w", encoding="utf-8") as f:
+            json_file = reports_dir / "step_execution.json"
+
+            existing_suites = []
+            if json_file.exists():
+                try:
+                    # Keep records from current run if file is fresh (< 20 mins)
+                    if (time.time() - json_file.stat().st_mtime) < 1200:
+                        with open(json_file, "r", encoding="utf-8") as f:
+                            prev_data = json.load(f)
+                            if "suites" in prev_data:
+                                existing_suites = prev_data["suites"]
+                            elif "steps" in prev_data:
+                                existing_suites = [{
+                                    "suite": prev_data.get("suite", "Previous Suite"),
+                                    "total_steps": prev_data.get("total_steps", len(prev_data["steps"])),
+                                    "elapsed": prev_data.get("elapsed", 0),
+                                    "passed_count": prev_data.get("passed_count", 0),
+                                    "failed_count": prev_data.get("failed_count", 0),
+                                    "steps": prev_data["steps"],
+                                }]
+                except Exception:
+                    existing_suites = []
+
+            # Replace any previous entry with the same suite name
+            existing_suites = [s for s in existing_suites if s.get("suite") != self.suite_name]
+
+            current_suite_entry = {
+                "suite": self.suite_name,
+                "total_steps": self.total_steps,
+                "elapsed": elapsed,
+                "passed_count": passed_count,
+                "failed_count": failed_count,
+                "steps": [
+                    {"step": s[0], "desc": s[1], "status": s[2]}
+                    for s in self.steps_record
+                ]
+            }
+            existing_suites.append(current_suite_entry)
+
+            all_steps = []
+            for s in existing_suites:
+                all_steps.extend(s.get("steps", []))
+
+            total_pass = sum(s.get("passed_count", 0) for s in existing_suites)
+            total_fail = sum(s.get("failed_count", 0) for s in existing_suites)
+
+            with open(json_file, "w", encoding="utf-8") as f:
                 json.dump({
+                    "suites": existing_suites,
                     "suite": self.suite_name,
-                    "total_steps": self.total_steps,
+                    "total_steps": len(all_steps),
                     "elapsed": elapsed,
-                    "passed_count": passed_count,
-                    "failed_count": failed_count,
-                    "steps": [
-                        {"step": s[0], "desc": s[1], "status": s[2]}
-                        for s in self.steps_record
-                    ]
+                    "passed_count": total_pass,
+                    "failed_count": total_fail,
+                    "steps": all_steps
                 }, f, indent=2)
         except Exception as e:
             safe_print(f"[WARNING] Could not save step_execution.json: {e}", flush=True)

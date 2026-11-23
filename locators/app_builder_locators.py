@@ -11,15 +11,21 @@ class AppBuilderLocators:
     APP_NAME_INPUT = "input[placeholder*='App Name'], input[type='text']"
     CONNECT_GOOGLE_BUTTON = re.compile(r"Connect Your Google Account", re.IGNORECASE)
     GOOGLE_ACCOUNT_LINK_PATTERN = re.compile(r"chartapps.*@gmail", re.IGNORECASE)
-    CONTINUE_BUTTON = re.compile(r"^Continue$", re.IGNORECASE)
-    NEXT_BUTTON = re.compile(r"^Next$", re.IGNORECASE)
+    CONTINUE_BUTTON = re.compile(r"Continue", re.IGNORECASE)
+    NEXT_BUTTON = re.compile(r"Next", re.IGNORECASE)
     SELECT_SPREADSHEET_BUTTON = re.compile(r"Select Your Spreadsheet", re.IGNORECASE)
     CREATE_DASHBOARD_BUTTON = re.compile(r"Create Dashboard", re.IGNORECASE)
+
+    # Google OAuth Consent Screen Locators
+    GOOGLE_OAUTH_URL_SUBSTRING = "accounts.google.com"
+    GOOGLE_CONSENT_TITLE = re.compile(r"wants access to your Google Account|already has some access", re.IGNORECASE)
+    GOOGLE_CONTINUE_SELECTOR = "button:has-text('Continue'), [role='button']:has-text('Continue'), div[role='button']:has-text('Continue')"
+    GOOGLE_NEXT_SELECTOR = "button:has-text('Next'), [role='button']:has-text('Next')"
 
     # Spreadsheet Picker & Mapping
     SPREADSHEET_OPTION_NAME = "Regression Testing Automation"
     SPREADSHEET_IFRAME_CSS = "iframe[src*='picker'], iframe[name*='picker'], iframe"
-    SELECT_BUTTON = re.compile(r"^Select$", re.IGNORECASE)
+    SELECT_BUTTON = re.compile(r"Select", re.IGNORECASE)
     DEFAULT_SHEET = "User"
     DEFAULT_NAME_COL = "Name "
     DEFAULT_EMAIL_COL = "Email"

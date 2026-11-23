@@ -23,7 +23,8 @@ class AppBuilderPage(BasePage):
 
     def initiate_create_app(self, app_name: str, app_slug: str) -> None:
         """Click 'Create App' button and enter app name and subdomain/slug."""
-        self.page.get_by_role("button", name="Create App").click()
+        create_btn = self.page.locator("button:has-text('Create App')").first
+        create_btn.click()
         self.page.wait_for_timeout(1500)
 
         # First textbox is App Name
@@ -37,33 +38,95 @@ class AppBuilderPage(BasePage):
         slug_input.fill(app_slug)
 
     def connect_google_account_if_prompted(self) -> None:
-        """Connect Google Account if button is displayed."""
-        connect_btn = self.page.get_by_role("button", name=AppBuilderLocators.CONNECT_GOOGLE_BUTTON)
-        if connect_btn.is_visible(timeout=4000):
-            connect_btn.click()
-            self.page.wait_for_timeout(1500)
+        """Connect Google Account and handle all OAuth consent screens (Account selection, Continue, Next)."""
+        connect_btn = self.page.locator("button:has-text('Connect Your Google Account')").first
+        active_page = self.page
 
-            # Look for account link
-            account_link = self.page.get_by_role("link", name=AppBuilderLocators.GOOGLE_ACCOUNT_LINK_PATTERN)
-            if account_link.is_visible(timeout=5000):
-                account_link.click()
-                self.page.wait_for_timeout(1500)
+        # Check if connect button is visible
+        if connect_btn.is_visible(timeout=5000):
+            try:
+                # May open OAuth in a popup window or navigate in same tab
+                with self.page.expect_popup(timeout=4000) as popup_info:
+                    connect_btn.click()
+                active_page = popup_info.value
+            except Exception:
+                connect_btn.click()
+                active_page = self.page
 
-            # Click Continue / Next prompts
-            for _ in range(3):
-                cont_btn = self.page.get_by_role("button", name=AppBuilderLocators.CONTINUE_BUTTON)
-                if cont_btn.is_visible(timeout=3000):
-                    cont_btn.click()
-                    self.page.wait_for_timeout(1000)
+        # Poll all open context pages to find the Google OAuth page
+        start_wait = time.time()
+        while time.time() - start_wait < 10:
+            for p in self.page.context.pages:
+                if not p.is_closed() and "google.com" in p.url:
+                    active_page = p
+                    break
+            if "google.com" in active_page.url:
+                break
+            time.sleep(1)
 
-            next_btn = self.page.get_by_role("button", name=AppBuilderLocators.NEXT_BUTTON)
-            if next_btn.is_visible(timeout=3000):
-                next_btn.click()
-                self.page.wait_for_timeout(1000)
+        # If on Google Account selection screen, click chartapps.com@gmail.com
+        try:
+            account_elem = active_page.locator("text=chartapps.com@gmail.com, text=chartapps.com, [data-email*='chartapps.com']").first
+            if account_elem.is_visible(timeout=4000):
+                account_elem.click()
+                active_page.wait_for_timeout(2000)
+        except Exception:
+            pass
+
+        # Handle the Consent Screens: Click Continue -> Continue -> Next until back on ChartApps
+        start_consent = time.time()
+        while time.time() - start_consent < 35:
+            # Check if redirected back to ChartApps
+            if "chartapps.app" in self.page.url and not any("google.com" in p.url for p in self.page.context.pages if not p.is_closed()):
+                break
+
+            target_page = None
+            for p in self.page.context.pages:
+                if not p.is_closed() and "google.com" in p.url:
+                    target_page = p
+                    break
+            if not target_page:
+                if "chartapps.app" in self.page.url:
+                    break
+                target_page = active_page if not active_page.is_closed() else self.page
+
+            # Check for Continue button (as shown in Google consent screen)
+            continue_btn = target_page.locator(AppBuilderLocators.GOOGLE_CONTINUE_SELECTOR).first
+            if continue_btn.is_visible(timeout=2500):
+                try:
+                    continue_btn.click()
+                    time.sleep(2)
+                    continue
+                except Exception:
+                    pass
+
+            # Check for Next button
+            next_btn = target_page.locator(AppBuilderLocators.GOOGLE_NEXT_SELECTOR).first
+            if next_btn.is_visible(timeout=2000):
+                try:
+                    next_btn.click()
+                    time.sleep(2)
+                    continue
+                except Exception:
+                    pass
+
+            # Check for scope selection checkboxes if shown
+            checkboxes = target_page.locator("input[type='checkbox']").all()
+            for cb in checkboxes:
+                try:
+                    if not cb.is_checked():
+                        cb.check()
+                except Exception:
+                    pass
+
+            time.sleep(1)
+
+        self.page.bring_to_front()
+        self.page.wait_for_timeout(2500)
 
     def select_google_spreadsheet(self, spreadsheet_name: str = "Regression Testing Automation") -> None:
         """Open Google Picker and select spreadsheet."""
-        select_sheet_btn = self.page.get_by_role("button", name=AppBuilderLocators.SELECT_SPREADSHEET_BUTTON)
+        select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet')").first
         select_sheet_btn.click()
         self.page.wait_for_timeout(3000)
 
@@ -75,12 +138,12 @@ class AppBuilderPage(BasePage):
                 break
 
         if picker_frame:
-            picker_frame.get_by_role("option", name=spreadsheet_name).click()
-            picker_frame.get_by_role("button", name=AppBuilderLocators.SELECT_BUTTON).click()
+            picker_frame.locator(f"[role='option']:has-text('{spreadsheet_name}')").first.click()
+            picker_frame.locator("button:has-text('Select')").first.click()
         else:
             picker_locator = self.page.frame_locator(AppBuilderLocators.SPREADSHEET_IFRAME_CSS).first
-            picker_locator.get_by_role("option", name=spreadsheet_name).click()
-            picker_locator.get_by_role("button", name=AppBuilderLocators.SELECT_BUTTON).click()
+            picker_locator.locator(f"[role='option']:has-text('{spreadsheet_name}')").first.click()
+            picker_locator.locator("button:has-text('Select')").first.click()
 
         self.page.wait_for_timeout(2500)
 
@@ -107,10 +170,7 @@ class AppBuilderPage(BasePage):
         sheet: str = "Regression Submition",
     ) -> None:
         """Add a new page in editor mode with designated details sheet."""
-        # Click Pages menu
-        pages_item = self.page.get_by_role("listitem", name=AppBuilderLocators.PAGES_ICON).get_by_role("img")
-        if not pages_item.is_visible(timeout=3000):
-            pages_item = self.page.locator("li:has-text('Pages'), [name='Pages']").first
+        pages_item = self.page.locator("li:has-text('Pages'), [name='Pages']").first
         pages_item.click()
         self.page.wait_for_timeout(1000)
 
@@ -159,9 +219,7 @@ class AppBuilderPage(BasePage):
         # 1. Home Page Form Block
         self.page.get_by_role("link", name="Home").click()
         self.page.wait_for_timeout(1500)
-        new_block = self.page.get_by_role("listitem", name=AppBuilderLocators.NEW_BLOCK_ICON).get_by_role("img")
-        if not new_block.is_visible(timeout=3000):
-            new_block = self.page.locator("li:has-text('New Block')").first
+        new_block = self.page.locator("li:has-text('New Block')").first
         new_block.click()
         self.page.wait_for_timeout(1000)
 
@@ -187,9 +245,7 @@ class AppBuilderPage(BasePage):
         # 2. About Page Table Block
         self.page.get_by_role("link", name="About").click()
         self.page.wait_for_timeout(1500)
-        new_block = self.page.get_by_role("listitem", name=AppBuilderLocators.NEW_BLOCK_ICON).get_by_role("img")
-        if not new_block.is_visible(timeout=3000):
-            new_block = self.page.locator("li:has-text('New Block')").first
+        new_block = self.page.locator("li:has-text('New Block')").first
         new_block.click()
         self.page.wait_for_timeout(1000)
 
@@ -262,7 +318,6 @@ class AppBuilderPage(BasePage):
             if url_val:
                 return url_val
 
-        # Fallback to base app url without tokens/editor params
         curr = self.page.url
         base_url = curr.split("?")[0].rstrip("/")
         return base_url

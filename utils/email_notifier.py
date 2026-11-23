@@ -2,7 +2,8 @@
 
 Sends comprehensive HTML email notifications with:
 - Vibrant Green (Pass) and Red (Fail) status indicators
-- Step-by-step test execution log
+- Executive Scenario Checklist Matrix (Existing App vs New App)
+- Interactive Step-by-Step Test Execution Checklist with status badges
 - Embedded inline screenshot and attachment of the failed page area on failure
 - Run statistics, duration, and GitHub Actions workflow links
 """
@@ -49,6 +50,7 @@ def parse_test_results() -> dict:
     errors_count = 0
     time_taken = "0.0"
     failure_details = []
+    testcases = []
 
     if xml_path.exists():
         try:
@@ -61,25 +63,42 @@ def parse_test_results() -> dict:
                 errors_count = int(suite.attrib.get("errors", "0"))
                 time_taken = suite.attrib.get("time", "0.0")
 
-                for failure in suite.iter("failure"):
-                    failure_details.append({
-                        "message": failure.attrib.get("message", "Test assertion failed"),
-                        "trace": (failure.text or "").strip()[-1200:],
-                    })
-                for error in suite.iter("error"):
-                    failure_details.append({
-                        "message": error.attrib.get("message", "Execution error"),
-                        "trace": (error.text or "").strip()[-1200:],
+                for tc in suite.iter("testcase"):
+                    tc_name = tc.attrib.get("name", "Unknown Test")
+                    tc_time = tc.attrib.get("time", "0.0")
+                    is_failed = False
+                    err_msg = ""
+                    for failure in tc.iter("failure"):
+                        is_failed = True
+                        err_msg = failure.attrib.get("message", "Assertion failed")
+                        failure_details.append({
+                            "message": f"[{tc_name}] {err_msg}",
+                            "trace": (failure.text or "").strip()[-1200:],
+                        })
+                    for error in tc.iter("error"):
+                        is_failed = True
+                        err_msg = error.attrib.get("message", "Error")
+                        failure_details.append({
+                            "message": f"[{tc_name}] {err_msg}",
+                            "trace": (error.text or "").strip()[-1200:],
+                        })
+                    testcases.append({
+                        "name": tc_name,
+                        "time": tc_time,
+                        "passed": not is_failed,
+                        "error": err_msg,
                     })
         except Exception as e:
             print(f"[WARNING] Could not parse junit XML: {e}")
 
-    # Parse step records
+    # Parse multi-scenario suites and step records
     step_records = []
+    suites_data = []
     if json_path.exists():
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                suites_data = data.get("suites", [])
                 step_records = data.get("steps", [])
                 if not time_taken or time_taken == "0.0":
                     time_taken = str(data.get("elapsed", "0.0"))
@@ -87,6 +106,16 @@ def parse_test_results() -> dict:
                     failures_count = data.get("failed_count")
         except Exception as e:
             print(f"[WARNING] Could not parse step json: {e}")
+
+    # If no suites in json, create default single suite entry from step_records
+    if not suites_data and step_records:
+        suites_data = [{
+            "suite": "Regression Test",
+            "total_steps": len(step_records),
+            "passed_count": len([s for s in step_records if s.get("status") == "PASSED"]),
+            "failed_count": len([s for s in step_records if s.get("status") != "PASSED"]),
+            "steps": step_records,
+        }]
 
     is_passed = (failures_count == 0 and errors_count == 0)
     return {
@@ -96,6 +125,8 @@ def parse_test_results() -> dict:
         "errors": errors_count,
         "duration": time_taken,
         "failure_details": failure_details,
+        "testcases": testcases,
+        "suites": suites_data,
         "steps": step_records,
     }
 
@@ -105,13 +136,12 @@ def find_screenshots() -> list[Path]:
     screenshots_dir = Path("reports/screenshots")
     if not screenshots_dir.exists():
         return []
-    # Return png files sorted newest first
     pngs = sorted(screenshots_dir.glob("*.png"), key=os.path.getmtime, reverse=True)
     return pngs
 
 
 def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") -> str:
-    """Generate high-impact HTML email body with green/red theme and step indicators."""
+    """Generate high-impact HTML email body with scenario matrix and checklist."""
     is_passed = results["is_passed"]
     status_text = "PASSED" if is_passed else "FAILED"
     header_color = "#10b981" if is_passed else "#ef4444"
@@ -122,46 +152,105 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") ->
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Step rows HTML
-    steps_html = ""
-    if results["steps"]:
-        steps_rows = []
-        for s in results["steps"]:
-            s_num = s.get("step", 0)
-            s_desc = s.get("desc", "")
-            s_status = s.get("status", "PASSED")
-            s_passed = s_status == "PASSED"
-            row_badge_bg = "#ecfdf5" if s_passed else "#fef2f2"
-            row_badge_color = "#047857" if s_passed else "#dc2626"
-            row_icon = "🟢 Passed" if s_passed else "🔴 Failed"
-            steps_rows.append(f"""
-            <tr style="border-bottom: 1px solid #e5e7eb;">
-              <td style="padding: 10px 14px; font-weight: 600; color: #374151;">Step {s_num:02d}</td>
-              <td style="padding: 10px 14px; color: #4b5563; font-size: 14px;">{s_desc}</td>
-              <td style="padding: 10px 14px; text-align: right;">
-                <span style="display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; background-color: {row_badge_bg}; color: {row_badge_color};">
-                  {row_icon}
-                </span>
-              </td>
-            </tr>
+    # 1. Executive Scenario Matrix
+    scenario_cards = []
+    default_scenarios = [
+        {"title": "Scenario 1: Existing App (Team Tracker)", "desc": "Dashboard navigation, dynamic task entry, toast check, spreadsheet storage verification"},
+        {"title": "Scenario 2: New App Creation & Workflow", "desc": "App creation, Google OAuth consent, picker sheet, details page, blocks, end-user verification, cleanup"},
+    ]
+
+    # Map parsed suites or fallback
+    if results["suites"]:
+        for idx, suite in enumerate(results["suites"]):
+            s_name = suite.get("suite", f"Scenario {idx+1}")
+            s_pass = suite.get("failed_count", 0) == 0
+            s_color = "#10b981" if s_pass else "#ef4444"
+            s_bg = "#ecfdf5" if s_pass else "#fef2f2"
+            s_badge = "🟢 PASSED" if s_pass else "🔴 FAILED"
+            s_total = suite.get("total_steps", 0)
+            s_passed_steps = suite.get("passed_count", 0)
+
+            scenario_cards.append(f"""
+            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-left: 4px solid {s_color}; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 14px; font-weight: 700; color: #1f2937;">{s_name}</span>
+                <span style="display: inline-block; padding: 3px 10px; border-radius: 9999px; font-size: 12px; font-weight: 700; background: {s_bg}; color: {s_color};">{s_badge}</span>
+              </div>
+              <div style="font-size: 12px; color: #6b7280;">
+                Steps Verified: <strong>{s_passed_steps}/{s_total}</strong> completed successfully
+              </div>
+            </div>
             """)
-        steps_html = f"""
-        <div style="margin-top: 24px;">
-          <h3 style="margin: 0 0 12px; font-size: 16px; color: #1f2937;">📋 Step-by-Step Execution Breakdown</h3>
-          <table style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-            <thead>
-              <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb; text-align: left; font-size: 13px; color: #6b7280;">
-                <th style="padding: 10px 14px;">STEP</th>
-                <th style="padding: 10px 14px;">ACTION / ASSERTION</th>
-                <th style="padding: 10px 14px; text-align: right;">STATUS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {''.join(steps_rows)}
-            </tbody>
-          </table>
-        </div>
-        """
+    else:
+        for idx, sc in enumerate(default_scenarios):
+            s_color = "#10b981" if is_passed else "#ef4444"
+            s_bg = "#ecfdf5" if is_passed else "#fef2f2"
+            s_badge = "🟢 PASSED" if is_passed else "🔴 FAILED"
+            scenario_cards.append(f"""
+            <div style="background: #ffffff; border: 1px solid #e5e7eb; border-left: 4px solid {s_color}; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 14px; font-weight: 700; color: #1f2937;">{sc['title']}</span>
+                <span style="display: inline-block; padding: 3px 10px; border-radius: 9999px; font-size: 12px; font-weight: 700; background: {s_bg}; color: {s_color};">{s_badge}</span>
+              </div>
+              <div style="font-size: 12px; color: #6b7280;">{sc['desc']}</div>
+            </div>
+            """)
+
+    scenario_matrix_html = f"""
+    <div style="margin-top: 24px;">
+      <h3 style="margin: 0 0 12px; font-size: 16px; color: #1f2937;">📑 Regression Scenarios Executive Summary</h3>
+      {''.join(scenario_cards)}
+    </div>
+    """
+
+    # 2. Detailed Checklist HTML per Suite
+    checklist_sections = []
+    if results["suites"]:
+        for suite in results["suites"]:
+            s_title = suite.get("suite", "Scenario Checklist")
+            s_steps = suite.get("steps", [])
+            step_rows = []
+            for s in s_steps:
+                s_num = s.get("step", 0)
+                s_desc = s.get("desc", "")
+                s_status = s.get("status", "PASSED")
+                s_passed = s_status == "PASSED"
+                icon = "✔" if s_passed else "✖"
+                badge_bg = "#ecfdf5" if s_passed else "#fef2f2"
+                badge_col = "#047857" if s_passed else "#dc2626"
+                step_rows.append(f"""
+                <tr style="border-bottom: 1px solid #f3f4f6;">
+                  <td style="padding: 8px 12px; width: 40px; text-align: center;">
+                    <span style="display: inline-block; width: 22px; height: 22px; line-height: 22px; border-radius: 50%; background: {badge_bg}; color: {badge_col}; font-size: 12px; font-weight: 700;">{icon}</span>
+                  </td>
+                  <td style="padding: 8px 12px; font-weight: 600; color: #4b5563; width: 70px; font-size: 13px;">Step {s_num:02d}</td>
+                  <td style="padding: 8px 12px; color: #374151; font-size: 13px;">{s_desc}</td>
+                  <td style="padding: 8px 12px; text-align: right; width: 80px;">
+                    <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: {badge_bg}; color: {badge_col};">
+                      {s_status}
+                    </span>
+                  </td>
+                </tr>
+                """)
+            checklist_sections.append(f"""
+            <div style="margin-top: 18px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+              <div style="background: #f9fafb; padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-weight: 700; font-size: 14px; color: #374151;">
+                📋 Checklist: {s_title}
+              </div>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tbody>
+                  {''.join(step_rows)}
+                </tbody>
+              </table>
+            </div>
+            """)
+
+    checklist_html = f"""
+    <div style="margin-top: 24px;">
+      <h3 style="margin: 0 0 12px; font-size: 16px; color: #1f2937;">✅ Scenario Step-by-Step Verification Checklist</h3>
+      {''.join(checklist_sections)}
+    </div>
+    """ if checklist_sections else ""
 
     # Failure details HTML
     failure_html = ""
@@ -205,7 +294,7 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") ->
       <title>Test Execution: {status_text}</title>
     </head>
     <body style="margin: 0; padding: 20px; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1f2937;">
-      <div style="max-width: 720px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;">
+      <div style="max-width: 760px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;">
         
         <!-- Header Banner -->
         <div style="background: {header_gradient}; padding: 28px 24px; text-align: center; color: #ffffff;">
@@ -213,23 +302,27 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") ->
             {badge_icon} {status_text}
           </div>
           <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #ffffff;">ChartApps Regression Suite</h1>
-          <p style="margin: 6px 0 0; font-size: 14px; opacity: 0.9;">Team Tracker Form Submission & Spreadsheet Verification</p>
+          <p style="margin: 6px 0 0; font-size: 14px; opacity: 0.95;">Existing App (Team Tracker) & New App Creation Workflows</p>
         </div>
 
         <div style="padding: 24px;">
           <!-- Execution Stats Summary -->
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
-            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; text-align: center;">
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px;">
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center;">
               <div style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase;">Result</div>
-              <div style="font-size: 18px; font-weight: 800; color: {header_color}; margin-top: 4px;">{status_text}</div>
+              <div style="font-size: 16px; font-weight: 800; color: {header_color}; margin-top: 4px;">{status_text}</div>
             </div>
-            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center;">
               <div style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase;">Duration</div>
-              <div style="font-size: 18px; font-weight: 800; color: #1f2937; margin-top: 4px;">{results['duration']}s</div>
+              <div style="font-size: 16px; font-weight: 800; color: #1f2937; margin-top: 4px;">{results['duration']}s</div>
             </div>
-            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; text-align: center;">
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center;">
+              <div style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase;">Scenarios</div>
+              <div style="font-size: 16px; font-weight: 800; color: #1f2937; margin-top: 4px;">{len(results['suites']) or 2} Tests</div>
+            </div>
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center;">
               <div style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase;">Trigger</div>
-              <div style="font-size: 18px; font-weight: 800; color: #1f2937; margin-top: 4px;">{git_info['event'].capitalize()}</div>
+              <div style="font-size: 16px; font-weight: 800; color: #1f2937; margin-top: 4px;">{git_info['event'].capitalize()}</div>
             </div>
           </div>
 
@@ -253,9 +346,10 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") ->
             </tr>
           </table>
 
+          {scenario_matrix_html}
           {failure_html}
           {screenshot_html}
-          {steps_html}
+          {checklist_html}
 
           <div style="margin-top: 28px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; color: #9ca3af; font-size: 12px;">
             Automated regression alert powered by Playwright & GitHub Actions CI/CD.
@@ -270,7 +364,6 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "") ->
 
 def send_notification() -> None:
     """Main dispatch function to assemble and send email."""
-    # Read SMTP credentials
     smtp_user = os.environ.get("EMAIL_USERNAME") or os.environ.get("SMTP_USER") or ""
     smtp_pass = os.environ.get("EMAIL_PASSWORD") or os.environ.get("SMTP_PASS") or ""
     email_to = os.environ.get("EMAIL_TO") or "saravanans@objectways.com"
@@ -288,7 +381,7 @@ def send_notification() -> None:
     is_passed = results["is_passed"]
     subject_status = "PASS" if is_passed else "FAIL"
     subject_icon = "🟢" if is_passed else "🔴"
-    subject = f"{subject_icon} [{subject_status}] ChartApps Regression Suite Run - {git_info['branch']} ({results['duration']}s)"
+    subject = f"{subject_icon} [{subject_status}] ChartApps Regression Suite (Existing & New App) - {git_info['branch']} ({results['duration']}s)"
 
     print("=" * 65)
     print(f"[EMAIL] Test Result Status: {subject_status}")
@@ -309,7 +402,6 @@ def send_notification() -> None:
         print("[WARNING] No recipients specified. Skipping email.")
         return
 
-    # Build MIMEMultipart message
     msg = MIMEMultipart("related")
     msg["Subject"] = subject
     msg["From"] = f"ChartApps CI/CD <{smtp_user}>"
@@ -336,7 +428,6 @@ def send_notification() -> None:
         except Exception as e:
             print(f"[WARNING] Could not embed screenshot {primary_screenshot}: {e}")
 
-        # Also attach all screenshots as downloadable files
         for sc in screenshots:
             try:
                 with open(sc, "rb") as sc_file:
@@ -359,9 +450,9 @@ def send_notification() -> None:
         server.login(smtp_user, smtp_pass)
         server.sendmail(smtp_user, recipients, msg.as_string())
         server.quit()
-        print(f"[SUCCESS] Email alert sent successfully to: {', '.join(recipients)}")
-    except Exception as e:
-        print(f"[ERROR] Failed to send email via SMTP: {e}")
+        print(f"[SUCCESS] Email notification dispatched to: {', '.join(recipients)}")
+    except Exception as exc:
+        print(f"[ERROR] Failed to send email via SMTP: {exc}")
 
 
 if __name__ == "__main__":
