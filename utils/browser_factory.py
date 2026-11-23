@@ -30,7 +30,10 @@ def launch_persistent_browser(
         "ignore_default_args": ["--enable-automation"],
     }
     if not headless:
-        launch_kwargs["args"].append("--start-maximized")
+        launch_kwargs["args"].extend([
+            "--start-maximized",
+            "--window-position=0,0",
+        ])
         launch_kwargs["no_viewport"] = True
     else:
         launch_kwargs["viewport"] = {"width": 1920, "height": 1080}
@@ -55,6 +58,20 @@ def launch_persistent_browser(
             print(f"[WARNING] Could not load cookies from {target_state}: {e}")
 
     page = context.pages[0] if context.pages else context.new_page()
+
+    # Maximize the OS window via Chrome DevTools Protocol when running in headed mode
+    if not headless:
+        try:
+            cdp = context.new_cdp_session(page)
+            win = cdp.send("Browser.getWindowForTarget")
+            if win and "windowId" in win:
+                cdp.send("Browser.setWindowBounds", {
+                    "windowId": win["windowId"],
+                    "bounds": {"windowState": "maximized"},
+                })
+        except Exception:
+            pass
+
     return context, page
 
 
@@ -69,10 +86,33 @@ def create_browser_and_page(
         "args": ["--disable-blink-features=AutomationControlled"],
         "ignore_default_args": ["--enable-automation"],
     }
+    if not headless:
+        launch_kwargs["args"].extend([
+            "--start-maximized",
+            "--window-position=0,0",
+        ])
+        context_kwargs = {"no_viewport": True}
+    else:
+        context_kwargs = {"viewport": {"width": 1920, "height": 1080}}
+
     if channel:
         launch_kwargs["channel"] = channel
 
     browser: Browser = playwright.chromium.launch(**launch_kwargs)
-    context: BrowserContext = browser.new_context()
+    context: BrowserContext = browser.new_context(**context_kwargs)
     page: Page = context.new_page()
+
+    # Maximize the OS window via Chrome DevTools Protocol when running in headed mode
+    if not headless:
+        try:
+            cdp = context.new_cdp_session(page)
+            win = cdp.send("Browser.getWindowForTarget")
+            if win and "windowId" in win:
+                cdp.send("Browser.setWindowBounds", {
+                    "windowId": win["windowId"],
+                    "bounds": {"windowState": "maximized"},
+                })
+        except Exception:
+            pass
+
     return browser, context, page

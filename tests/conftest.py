@@ -11,6 +11,7 @@ from playwright.sync_api import BrowserContext, Page, Playwright
 from pages.login_page import LoginPage
 from pages.spreadsheet_page import SpreadsheetPage
 from pages.team_tracker_page import TeamTrackerPage
+from pages.app_builder_page import AppBuilderPage
 from utils.browser_factory import launch_persistent_browser
 from utils.config import HEADLESS, USER_DATA_DIR
 
@@ -50,6 +51,12 @@ def persistent_page(persistent_context: BrowserContext) -> Generator[Page, None,
 def team_tracker_page(persistent_page: Page) -> TeamTrackerPage:
     """Provide an initialized TeamTrackerPage instance."""
     return TeamTrackerPage(persistent_page)
+
+
+@pytest.fixture
+def app_builder_page(persistent_page: Page) -> AppBuilderPage:
+    """Provide an initialized AppBuilderPage instance."""
+    return AppBuilderPage(persistent_page)
 
 
 @pytest.hookimpl(hookwrapper=True)

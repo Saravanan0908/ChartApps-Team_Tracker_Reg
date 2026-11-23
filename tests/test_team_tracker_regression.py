@@ -1,14 +1,11 @@
-"""Regression Test: Team Tracker Form Submission and Spreadsheet Data Storage.
+"""ChartApps Complete Regression Suite.
 
-Validates:
-1. Dashboard navigation and modal handling
-2. Navigation to Team Tracker and tracker view
-3. Date picker selection using current date
-4. Dynamic Task / Activity input with current date and runtime
-5. Form submission and success confirmation ("Data added to the spreadsheet")
-6. Verification that submitted data is stored and visible in the spreadsheet table
+Executes 2 core regression scenarios in order:
+Scenario 1: Existing App - Team Tracker Form Submission and Spreadsheet Data Storage.
+Scenario 2: New App Creation - Builder Setup, Blocks Configuration, Form Submission, End-User Verification, and App Cleanup.
 """
 
+import os
 import sys
 import time
 import webbrowser
@@ -20,18 +17,28 @@ from playwright.sync_api import Page, sync_playwright
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pages.team_tracker_page import TeamTrackerPage
+from pages.app_builder_page import AppBuilderPage
 from testdata.team_tracker_data import TeamTrackerTestData
+from testdata.new_app_data import NewAppTestData
 from utils.browser_factory import launch_persistent_browser
 from utils.config import HEADLESS, USER_DATA_DIR
 from utils.step_logger import StepLogger
 
 
+# ==============================================================================
+# SCENARIO 1: EXISTING APP (TEAM TRACKER FORM & SPREADSHEET VERIFICATION)
+# ==============================================================================
+
 @pytest.mark.regression
-def test_form_submission_and_data_stored(persistent_page: Page) -> None:
-    """Regression test for submitting a task with current date and validating spreadsheet storage."""
-    logger = StepLogger(suite_name="Team Tracker Regression Test", total_steps=11)
+def test_01_existing_app_team_tracker_regression(persistent_page: Page) -> None:
+    """Scenario 1: Regression test on existing Team Tracker app."""
+    logger = StepLogger(suite_name="Scenario 1: Team Tracker Regression", total_steps=11)
     logger.start_suite()
-    team_tracker_page = TeamTrackerPage(persistent_page)
+
+    if isinstance(persistent_page, TeamTrackerPage):
+        team_tracker_page = persistent_page
+    else:
+        team_tracker_page = TeamTrackerPage(persistent_page)
 
     try:
         # Step 1: Open Dashboard
@@ -107,11 +114,125 @@ def test_form_submission_and_data_stored(persistent_page: Page) -> None:
         logger.finish_suite()
 
 
+# Alias for backwards compatibility if called directly
+existing_app_regression_scenario = test_01_existing_app_team_tracker_regression
+
+
+# ==============================================================================
+# SCENARIO 2: NEW APP CREATION & WORKFLOW VERIFICATION
+# ==============================================================================
+
+@pytest.mark.regression
+def test_02_new_app_creation_and_end_user_flow(persistent_page: Page) -> None:
+    """Scenario 2: Create a new app, configure pages and blocks, submit form, verify as end-user, and cleanup."""
+    logger = StepLogger(suite_name="Scenario 2: New App Creation & Workflow", total_steps=12)
+    logger.start_suite()
+
+    if isinstance(persistent_page, AppBuilderPage):
+        builder_page = persistent_page
+    else:
+        builder_page = AppBuilderPage(persistent_page)
+
+    data = NewAppTestData.get_new_app_payload()
+    app_name = data["app_name"]
+    app_slug = data["slug"]
+
+    try:
+        # Step 1: Open Dashboard
+        logger.step(1, "Open Dashboard", "Navigating to ChartApps dashboard")
+        builder_page.open_dashboard()
+        logger.passed(1, "Dashboard reached")
+
+        # Step 2: Initiate App Creation
+        logger.step(2, "Initiate App Creation", f"Setting App Name: '{app_name}', Slug: '{app_slug}'")
+        builder_page.initiate_create_app(app_name=app_name, app_slug=app_slug)
+        logger.passed(2, "App name and subdomain filled")
+
+        # Step 3: Google Account Connection
+        logger.step(3, "Connect Google Account", "Validating or establishing Google Account connection")
+        builder_page.connect_google_account_if_prompted()
+        logger.passed(3, "Google Account authenticated")
+
+        # Step 4: Select Spreadsheet
+        logger.step(4, "Select Google Spreadsheet", f"Selecting '{data['spreadsheet_name']}' via Google Picker")
+        builder_page.select_google_spreadsheet(spreadsheet_name=data["spreadsheet_name"])
+        logger.passed(4, "Spreadsheet selected from picker")
+
+        # Step 5: Map Columns & Create Dashboard
+        logger.step(5, "Map Columns and Create Dashboard", f"Mapping Sheet='{data['sheet_name']}', Name='{data['col_name']}', Email='{data['col_email']}'")
+        builder_page.map_columns_and_create_dashboard(
+            sheet=data["sheet_name"],
+            name_col=data["col_name"],
+            email_col=data["col_email"],
+        )
+        logger.passed(5, "Dashboard created and loaded in editor mode")
+
+        # Step 6: Add Details Page
+        logger.step(6, "Add 'About' Page", f"Creating new page '{data['page_name']}' linked to '{data['details_sheet']}'")
+        builder_page.add_new_page(
+            page_name=data["page_name"],
+            slug=data["page_slug"],
+            sheet=data["details_sheet"],
+        )
+        logger.passed(6, f"'{data['page_name']}' page added successfully")
+
+        # Step 7: Configure Navigation Bar
+        logger.step(7, "Configure Header Navigation", "Linking navigation bar to the newly created page")
+        builder_page.configure_header_navigation()
+        logger.passed(7, "Header navigation updated")
+
+        # Step 8: Add Blocks to Pages
+        logger.step(8, "Add Form & Table Blocks", "Adding Form block to Home page and Table block to About page")
+        builder_page.add_blocks_to_editor()
+        logger.passed(8, "Blocks added and axes configured")
+
+        # Step 9: Submit Form in Editor Mode
+        logger.step(9, "Submit Form in Editor Mode", f"Submitting record: '{data['editor_text'][:35]}...'")
+        builder_page.submit_form_in_editor(
+            datetime_str=data["editor_datetime"],
+            date_str=data["editor_date"],
+            text_val=data["editor_text"],
+        )
+        logger.passed(9, "Form submitted successfully in editor mode")
+
+        # Step 10: Verify Data in About Table
+        logger.step(10, "Verify Stored Data in Table", "Checking About page table for the newly submitted record")
+        builder_page.verify_record_in_about_table(expected_snippet="Regression Testing is")
+        logger.passed(10, "Submitted record confirmed in About page table")
+
+        # Step 11: Publish App & Set Privacy
+        logger.step(11, "Publish App and Set Privacy", "Publishing app and retrieving public URL")
+        public_url = builder_page.publish_and_get_public_url()
+        logger.passed(11, f"App published: {public_url}")
+
+        # Step 12: End-User Submission & Cleanup
+        logger.step(12, "End-User Verification & Cleanup", "Testing public app as end-user in fresh context, then deleting app")
+        builder_page.submit_and_verify_as_end_user(
+            public_url=public_url,
+            date_str=data["enduser_date"],
+            text_val=data["enduser_text"],
+            context=builder_page.page.context,
+        )
+        builder_page.delete_app_and_cleanup(app_name=app_name)
+        logger.passed(12, "End-user flow verified and test app cleaned up successfully")
+
+    except Exception as exc:
+        failed_step = len(logger.steps_record) + 1
+        logger.failed(failed_step, str(exc))
+        raise
+    finally:
+        logger.finish_suite()
+
+
+# ==============================================================================
+# STANDALONE EXECUTION RUNNER
+# ==============================================================================
+
 def run_standalone() -> None:
-    """Run directly from command line in headless mode and exit automatically."""
-    print("=" * 65)
-    print(f"Running Regression Test (Headless: {HEADLESS})...")
-    print("=" * 65)
+    """Execute both regression scenarios sequentially in standalone mode."""
+    print("=" * 75)
+    print(f"Executing Full ChartApps Regression Suite (Headless: {HEADLESS})")
+    print("=" * 75)
 
     with sync_playwright() as playwright:
         context, page = launch_persistent_browser(
@@ -120,10 +241,31 @@ def run_standalone() -> None:
             headless=HEADLESS,
         )
         try:
-            test_form_submission_and_data_stored(page)
-            print("\n[SUCCESS] Regression Test Completed Successfully!")
+            # 1. Execute Scenario 1: Existing App
+            print("\n" + "#" * 60)
+            print(">>> SCENARIO 1: EXISTING APP (TEAM TRACKER) <<<")
+            print("#" * 60)
+            test_01_existing_app_team_tracker_regression(page)
+            print("[SUCCESS] Scenario 1 Passed Successfully!\n")
+
+            # 2. Execute Scenario 2: New App Creation & Workflow
+            print("\n" + "#" * 60)
+            print(">>> SCENARIO 2: NEW APP CREATION & WORKFLOW <<<")
+            print("#" * 60)
+            test_02_new_app_creation_and_end_user_flow(page)
+            print("[SUCCESS] Scenario 2 Passed Successfully!\n")
+
+            print("\n" + "=" * 75)
+            print("[COMPLETE] ALL REGRESSION SCENARIOS PASSED SUCCESSFULLY!")
+            print("=" * 75)
+
+            # Local Debugging Pause / CodeGen
+            if not os.environ.get("CI"):
+                print("\n[INFO] Both scenarios completed. Opening Playwright Inspector for manual debugging...")
+                page.pause()
+
         except Exception as e:
-            print(f"\n[FAILURE] Regression test failed: {e}")
+            print(f"\n[FAILURE] Regression test run failed: {e}")
             reports_dir = Path("reports/screenshots")
             reports_dir.mkdir(parents=True, exist_ok=True)
             screenshot_path = reports_dir / f"failure_regression_{int(time.time())}.png"
@@ -135,12 +277,12 @@ def run_standalone() -> None:
             report_path = Path("reports/azure_test_report.html").resolve()
             if report_path.exists():
                 print(f"[INFO] Report generated: {report_path}")
-                import os
                 if not os.environ.get("CI"):
                     webbrowser.open(report_path.as_uri())
             raise e
         finally:
-            context.close()
+            # context.close()
+            pass
 
 
 if __name__ == "__main__":
