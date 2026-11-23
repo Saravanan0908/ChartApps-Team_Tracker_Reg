@@ -2,6 +2,7 @@
 
 import re
 import time
+from datetime import datetime
 from typing import Optional
 from playwright.sync_api import Browser, BrowserContext, Page, expect
 
@@ -267,6 +268,76 @@ class AppBuilderPage(BasePage):
         self.add_form_block_to_home()
         self.add_table_block_to_about()
 
+    def select_date_picker_value(self, target_page: Page, selected_date: str) -> str:
+        """Select current date in the form date picker via calendar popup, day cell, and input events."""
+        now = datetime.now()
+        month_name = now.strftime("%B")
+        day_num = now.day
+        # Regex matching e.g. "November 23," or "November 23"
+        day_pattern = re.compile(rf"{month_name}\s+{day_num},?", re.IGNORECASE)
+
+        # Locate date picker input
+        d_input = target_page.get_by_role("textbox", name="yyyy-mm-dd")
+        if not d_input.is_visible(timeout=3000):
+            d_input = target_page.locator("input[placeholder*='yyyy-mm-dd'], input.flatpickr-input, input[name='Date']").first
+
+        if d_input.is_visible(timeout=3000):
+            # 1. Click textbox to open calendar popup
+            try:
+                d_input.click(force=True)
+                target_page.wait_for_timeout(500)
+            except Exception:
+                pass
+
+            # 2. Click current day cell in the calendar overlay
+            try:
+                day_cell = target_page.get_by_label(day_pattern)
+                if day_cell.first.is_visible(timeout=2000):
+                    day_cell.first.click()
+                else:
+                    today_cell = target_page.locator(".flatpickr-day.today, .today, .p-datepicker-today, [aria-current='date']").first
+                    if today_cell.is_visible(timeout=1000):
+                        today_cell.click()
+            except Exception:
+                pass
+
+            # 3. Fill date value
+            try:
+                d_input.fill(selected_date)
+            except Exception:
+                pass
+
+            # 4. Dispatch DOM events so Vue/reactive listeners update
+            try:
+                target_page.evaluate(
+                    """([val]) => {
+                        const inputs = document.querySelectorAll("input[placeholder*='yyyy-mm-dd'], input.flatpickr-input, input[name='Date'], input[type='text']");
+                        for (const el of inputs) {
+                            if (el.placeholder && el.placeholder.includes("yyyy-mm-dd") || el.classList.contains("flatpickr-input")) {
+                                el.value = val;
+                                el.dispatchEvent(new Event('input', {bubbles: true}));
+                                el.dispatchEvent(new Event('change', {bubbles: true}));
+                                break;
+                            }
+                        }
+                    }""",
+                    [selected_date]
+                )
+            except Exception:
+                pass
+
+            # 5. Dismiss calendar popup
+            try:
+                target_page.keyboard.press("Escape")
+                target_page.wait_for_timeout(300)
+            except Exception:
+                pass
+
+            val = d_input.input_value()
+            return val or selected_date
+
+        return selected_date
+
     def submit_form_in_editor(
         self,
         date_str: str,
@@ -287,17 +358,16 @@ class AppBuilderPage(BasePage):
                 dt_input.fill(datetime_str)
                 actual_datetime = dt_input.input_value() or datetime_str
 
-        # Fill date (Current Date) and capture submitted value
-        d_input = self.page.get_by_role("textbox", name="yyyy-mm-dd")
-        if d_input.is_visible(timeout=3000):
-            d_input.fill(date_str)
-            actual_date = d_input.input_value() or date_str
-        else:
-            actual_date = date_str
+        # Fill date (Current Date) using calendar overlay & input handling
+        actual_date = self.select_date_picker_value(self.page, date_str)
 
         # Fill text message and capture submitted value
         txt_input = self.page.get_by_role("textbox", name="Type here..")
+        if not txt_input.is_visible(timeout=3000):
+            txt_input = self.page.locator("input[placeholder*='Type here'], textarea[placeholder*='Type here']").first
+
         if txt_input.is_visible(timeout=3000):
+            txt_input.click()
             txt_input.fill(text_val)
             actual_text = txt_input.input_value() or text_val
         else:
@@ -310,8 +380,15 @@ class AppBuilderPage(BasePage):
             "datetime": actual_datetime,
         }
 
+        # Dismiss any lingering popups before clicking submit
+        self.page.keyboard.press("Escape")
+        self.page.wait_for_timeout(300)
+
         # Submit
-        self.page.get_by_role("button", name=AppBuilderLocators.SUBMIT_BUTTON).click()
+        submit_btn = self.page.get_by_role("button", name=AppBuilderLocators.SUBMIT_BUTTON)
+        if not submit_btn.is_visible(timeout=2000):
+            submit_btn = self.page.locator("button:has-text('Submit'), button[type='submit']").first
+        submit_btn.click()
         self.page.wait_for_timeout(3000)
 
         return self.last_submitted_editor_data
@@ -466,17 +543,16 @@ class AppBuilderPage(BasePage):
             user_page.goto(public_url, wait_until="domcontentloaded")
             user_page.wait_for_timeout(3000)
 
-            # Fill date (Current Date) and capture actual submitted value
-            d_input = user_page.get_by_role("textbox", name="yyyy-mm-dd")
-            if d_input.is_visible(timeout=5000):
-                d_input.fill(date_str)
-                actual_enduser_date = d_input.input_value() or date_str
-            else:
-                actual_enduser_date = date_str
+            # Fill date (Current Date) using calendar overlay & input handling
+            actual_enduser_date = self.select_date_picker_value(user_page, date_str)
 
             # Fill text and capture actual submitted value
             txt_input = user_page.get_by_role("textbox", name="Type here..")
-            if txt_input.is_visible(timeout=5000):
+            if not txt_input.is_visible(timeout=3000):
+                txt_input = user_page.locator("input[placeholder*='Type here'], textarea[placeholder*='Type here']").first
+
+            if txt_input.is_visible(timeout=3000):
+                txt_input.click()
                 txt_input.fill(text_val)
                 actual_enduser_text = txt_input.input_value() or text_val
             else:
@@ -488,8 +564,15 @@ class AppBuilderPage(BasePage):
                 "text": actual_enduser_text,
             }
 
+            # Dismiss any lingering popups before clicking submit
+            user_page.keyboard.press("Escape")
+            user_page.wait_for_timeout(300)
+
             # Submit
-            user_page.get_by_role("button", name=AppBuilderLocators.SUBMIT_BUTTON).click()
+            submit_btn = user_page.get_by_role("button", name=AppBuilderLocators.SUBMIT_BUTTON)
+            if not submit_btn.is_visible(timeout=2000):
+                submit_btn = user_page.locator("button:has-text('Submit'), button[type='submit']").first
+            submit_btn.click()
             user_page.wait_for_timeout(3000)
 
             # Navigate to About and verify in Table
