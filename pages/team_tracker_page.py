@@ -319,18 +319,24 @@ class TeamTrackerPage(BasePage):
         expect(self.success_toast.first).to_be_visible(timeout=10000)
 
     def sort_table_by_date(self) -> None:
-        """Sort the spreadsheet table by Date to bring the newly added entry to the top."""
+        """Sort the spreadsheet table by Date descending to bring the newly added entry to the top."""
         try:
-            if self.date_cell_header.first.is_visible(timeout=5000):
-                self.date_cell_header.first.click()
-            if self.sort_column_icon.first.is_visible(timeout=3000):
-                self.sort_column_icon.first.click()
+            date_th = self.date_cell_header.first
+            if date_th.is_visible(timeout=2000):
+                current_sort = date_th.get_attribute("aria-sort") or ""
+                if current_sort != "descending":
+                    date_th.click()
+                    self.page.wait_for_timeout(500)
+                    new_sort = date_th.get_attribute("aria-sort") or ""
+                    if new_sort == "ascending":
+                        date_th.click()
+                        self.page.wait_for_timeout(500)
         except Exception:
             pass
 
     def verify_data_stored_in_table(self, task_description: str, activity_text: str, timeout_ms: int = 15000) -> None:
         """Verify that the submitted task and activity strings appear in the spreadsheet table.
-        If displayed, verify successfully and dismiss any popup; if not displayed, throw an error.
+        Prints only expected and actual displayed data without dumping the entire table.
         
         Args:
             task_description (str): The submitted task description to locate.
@@ -340,21 +346,22 @@ class TeamTrackerPage(BasePage):
         task_locator = self.page.get_by_text(task_description).or_(self.page.locator(f'[title*="{task_description[:20]}"]'))
         activity_locator = self.page.get_by_text(activity_text)
 
-        try:
-            expect(task_locator.first).to_be_visible(timeout=timeout_ms)
-            expect(activity_locator.first).to_be_visible(timeout=timeout_ms)
-        except Exception as initial_err:
-            # Re-attempt after re-sorting and small wait
+        start_time = time.time()
+        found = False
+
+        while (time.time() - start_time) < (timeout_ms / 1000.0):
+            try:
+                if task_locator.first.is_visible(timeout=500) and activity_locator.first.is_visible(timeout=500):
+                    found = True
+                    break
+            except Exception:
+                pass
+            # Try sorting descending to ensure latest records are at top
             try:
                 self.sort_table_by_date()
-                self.page.wait_for_timeout(1000)
-                expect(task_locator.first).to_be_visible(timeout=5000)
-                expect(activity_locator.first).to_be_visible(timeout=5000)
             except Exception:
-                raise AssertionError(
-                    f"Entered form data was NOT displayed in spreadsheet table: "
-                    f"Task='{task_description}', Activity='{activity_text}'. Details: {initial_err}"
-                )
+                pass
+            self.page.wait_for_timeout(1000)
 
         # Close details drawer / slider popup if opened by table row interaction
         try:
@@ -366,3 +373,40 @@ class TeamTrackerPage(BasePage):
                 self.page.keyboard.press("Escape")
         except Exception:
             pass
+
+        # Extract actual displayed top row for clean reporting (without dumping entire table)
+        actual_task = "Not Found"
+        actual_activity = "Not Found"
+        try:
+            rows = self.page.locator("table tbody tr, .p-datatable-tbody tr")
+            if rows.count() > 0:
+                first_row = rows.first
+                cells = [c.strip() for c in first_row.locator("td").all_inner_texts() if c.strip()]
+                if len(cells) >= 3:
+                    actual_task = cells[1]
+                    actual_activity = cells[2]
+                elif len(cells) == 2:
+                    actual_task = cells[0]
+                    actual_activity = cells[1]
+                elif cells:
+                    actual_task = cells[0]
+        except Exception:
+            pass
+
+        if found:
+            print("\n" + "-" * 60)
+            print("[PASS] Table Row Verification Succeeded:")
+            print(f"  Expected: Task='{task_description}' | Activity='{activity_text}'")
+            print(f"  Actual:   Task='{task_description}' | Activity='{activity_text}' (Displayed in Table)")
+            print("-" * 60 + "\n")
+        else:
+            print("\n" + "-" * 60)
+            print("[FAIL] Table Row Verification Failed:")
+            print(f"  Expected: Task='{task_description}' | Activity='{activity_text}'")
+            print(f"  Actual:   Task='{actual_task}' | Activity='{actual_activity}'")
+            print("-" * 60 + "\n")
+            raise AssertionError(
+                f"Table Verification Failed:\n"
+                f"  Expected: Task='{task_description}' | Activity='{activity_text}'\n"
+                f"  Actual:   Task='{actual_task}' | Activity='{actual_activity}'"
+            )

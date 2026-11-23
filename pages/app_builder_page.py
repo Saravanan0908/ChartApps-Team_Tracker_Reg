@@ -47,12 +47,18 @@ class AppBuilderPage(BasePage):
 
     def connect_google_account_if_prompted(self) -> None:
         """Connect Google Account and handle OAuth consent steps:
-        1. Click 'Connect Your Google Account'
-        2. page.get_by_role("link", name="chartapps chartapps.com@gmail").click()
-        3. page.get_by_role("button", name="Continue").click()
+        1. Check if 'Select Your Spreadsheet' is already visible
+        2. Click 'Connect Your Google Account' if needed
+        3. page.get_by_role("link", name="chartapps chartapps.com@gmail").click()
         4. page.get_by_role("button", name="Continue").click()
         5. page.get_by_role("button", name="Next").click()
         """
+        # Check if Google account is already connected and spreadsheet selector is visible
+        select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
+        if select_sheet_btn.is_visible(timeout=3000):
+            print("[INFO] Google account already connected ('Select Your Spreadsheet' is visible). Proceeding...")
+            return
+
         connect_btn = self.page.get_by_role("button", name="Connect Your Google Account")
         if not connect_btn.is_visible(timeout=4000):
             connect_btn = self.page.locator("button:has-text('Connect Your Google Account')").first
@@ -64,44 +70,35 @@ class AppBuilderPage(BasePage):
         # Handle complete Google OAuth authentication & consent flow if on accounts.google.com
         start_time = time.time()
         while "accounts.google.com" in self.page.url and (time.time() - start_time) < 60:
-            # 1. Email entry if prompted ("Enter your email or phone")
-            try:
-                email_input = self.page.locator("input[type='email'], input#identifierId, input[name='identifier']").first
-                if email_input.is_visible(timeout=1000):
-                    email_input.fill(LoginTestData.EMAIL)
-                    self.page.wait_for_timeout(500)
-                    id_next = self.page.locator("#identifierNext, button:has-text('Next')").first
-                    if id_next.is_visible(timeout=1000):
-                        id_next.click()
-                        self.page.wait_for_timeout(2500)
-            except Exception:
-                pass
-
-            # 2. Password entry if prompted ("Enter your password")
-            try:
-                pwd_input = self.page.locator("input[type='password'], input[name='Passwd'], input[autocomplete='current-password']").first
-                if pwd_input.is_visible(timeout=1000):
-                    pwd_input.fill(LoginTestData.PASSWORD)
-                    self.page.wait_for_timeout(500)
-                    pwd_next = self.page.locator("#passwordNext, button:has-text('Next')").first
-                    if pwd_next.is_visible(timeout=1000):
-                        pwd_next.click()
-                        self.page.wait_for_timeout(2500)
-            except Exception:
-                pass
-
-            # 3. Google Account Chooser link if prompted (e.g. "chartapps chartapps.com@gmail")
+            # 1. Google Account Chooser link if prompted (e.g. "chartapps chartapps.com@gmail")
             try:
                 account_link = self.page.get_by_role("link", name=re.compile(r"chartapps.*@gmail", re.I)).or_(
-                    self.page.locator("text=chartapps.com@gmail.com, [data-email*='chartapps.com'], [data-identifier*='chartapps.com']")
+                    self.page.locator("text=chartapps.com@gmail.com, [data-email*='chartapps.com'], [data-identifier*='chartapps.com'], div[data-identifier]")
                 ).first
-                if account_link.is_visible(timeout=1000):
+                if account_link.is_visible(timeout=1500):
                     account_link.click()
                     self.page.wait_for_timeout(2000)
+                    continue
             except Exception:
                 pass
 
-            # 4. Consent Screen Checkboxes (e.g. "Select all" / Drive / Sheets permissions)
+            # 2. Check for "This browser or app may not be secure" block
+            try:
+                secure_block = self.page.locator("text='Couldn’t sign you in', text='This browser or app may not be secure'").first
+                if secure_block.is_visible(timeout=1000):
+                    print("[WARNING] Google displayed 'Couldn't sign you in'. Attempting recovery...")
+                    try_again = self.page.locator("a:has-text('Try again'), [role='link']:has-text('Try again')").first
+                    if try_again.is_visible(timeout=1000):
+                        try_again.click()
+                        self.page.wait_for_timeout(2000)
+                        continue
+                    self.page.goto(f"{self.dashboard_url}/new-multipage", wait_until="domcontentloaded")
+                    self.page.wait_for_timeout(2000)
+                    break
+            except Exception:
+                pass
+
+            # 3. Consent Screen Checkboxes (e.g. "Select all" / Drive / Sheets permissions)
             try:
                 checkboxes = self.page.locator("input[type='checkbox']:not(:checked)")
                 if checkboxes.count() > 0:
@@ -113,21 +110,51 @@ class AppBuilderPage(BasePage):
             except Exception:
                 pass
 
-            # 5. Consent Screen "Continue" button
+            # 4. Consent Screen "Continue" button
             try:
                 cont_btn = self.page.locator("button:has-text('Continue'), [role='button']:has-text('Continue'), div[role='button']:has-text('Continue')").first
-                if cont_btn.is_visible(timeout=1000):
+                if cont_btn.is_visible(timeout=1500):
                     cont_btn.click()
                     self.page.wait_for_timeout(2000)
+                    continue
             except Exception:
                 pass
 
-            # 6. Consent Screen "Next" / "Allow" button
+            # 5. Consent Screen "Next" / "Allow" button
             try:
                 next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next'), button:has-text('Allow'), [role='button']:has-text('Allow')").first
-                if next_btn.is_visible(timeout=1000):
+                if next_btn.is_visible(timeout=1500):
                     next_btn.click()
                     self.page.wait_for_timeout(2000)
+                    continue
+            except Exception:
+                pass
+
+            # 6. Email entry only if account chooser was absent
+            try:
+                email_input = self.page.locator("input[type='email'], input#identifierId, input[name='identifier']").first
+                if email_input.is_visible(timeout=1000):
+                    email_input.fill(LoginTestData.EMAIL)
+                    self.page.wait_for_timeout(500)
+                    id_next = self.page.locator("#identifierNext, button:has-text('Next')").first
+                    if id_next.is_visible(timeout=1000):
+                        id_next.click()
+                        self.page.wait_for_timeout(2500)
+                        continue
+            except Exception:
+                pass
+
+            # 7. Password entry if prompted
+            try:
+                pwd_input = self.page.locator("input[type='password'], input[name='Passwd'], input[autocomplete='current-password']").first
+                if pwd_input.is_visible(timeout=1000):
+                    pwd_input.fill(LoginTestData.PASSWORD)
+                    self.page.wait_for_timeout(500)
+                    pwd_next = self.page.locator("#passwordNext, button:has-text('Next')").first
+                    if pwd_next.is_visible(timeout=1000):
+                        pwd_next.click()
+                        self.page.wait_for_timeout(2500)
+                        continue
             except Exception:
                 pass
 
@@ -137,8 +164,12 @@ class AppBuilderPage(BasePage):
         try:
             select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
             expect(select_sheet_btn).to_be_visible(timeout=30000)
-        except Exception as e:
-            print(f"[WARNING] Waiting for spreadsheet selector button: {e}")
+        except Exception:
+            if "accounts.google.com" in self.page.url:
+                self.page.goto(f"{self.dashboard_url}/new-multipage", wait_until="domcontentloaded")
+                self.page.wait_for_timeout(2000)
+            select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
+            expect(select_sheet_btn).to_be_visible(timeout=10000)
 
         self.page.wait_for_timeout(1500)
 

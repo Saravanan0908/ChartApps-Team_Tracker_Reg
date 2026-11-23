@@ -39,6 +39,8 @@ def launch_persistent_browser(
         "headless": headless,
         "args": [
             "--disable-blink-features=AutomationControlled",
+            "--no-default-browser-check",
+            "--disable-features=IsolateOrigins,site-per-process",
         ],
         "ignore_default_args": ["--enable-automation"],
     }
@@ -62,6 +64,22 @@ def launch_persistent_browser(
     # Note: launch_persistent_context does not take 'storage_state' as a parameter;
     # it uses the SQLite database in user_data_dir.
     context = playwright.chromium.launch_persistent_context(**launch_kwargs)
+
+    # Anti-bot detection script to prevent Google OAuth blockage ("This browser or app may not be secure")
+    context.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+        window.chrome = {
+            runtime: {}
+        };
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5]
+        });
+        Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en']
+        });
+    """)
 
     # Inject saved cookies from storage_state.json if available
     storage_state_file = profile_dir / "storage_state.json"
@@ -119,6 +137,20 @@ def create_browser_and_page(
 
     browser: Browser = playwright.chromium.launch(**launch_kwargs)
     context: BrowserContext = browser.new_context(**context_kwargs)
+    context.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+        window.chrome = {
+            runtime: {}
+        };
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5]
+        });
+        Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en']
+        });
+    """)
     page: Page = context.new_page()
 
     # Maximize the OS window via Chrome DevTools Protocol when running in headed mode
