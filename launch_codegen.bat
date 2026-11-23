@@ -1,6 +1,18 @@
 @echo off
-echo ===================================================
-echo Launching Playwright CodeGen with Saved Auth Profile
-echo ===================================================
-call python -m playwright codegen --user-data-dir=.auth_profile --viewport-size="1920, 1080" https://chartapps.app/dashboard
+setlocal
+echo ===========================================================================
+echo  ChartApps Regression Suite - Direct Automated Execution
+echo ===========================================================================
+echo  Running all steps automatically without recorder or inspector tool...
+echo ===========================================================================
+
+set TARGET=%1
+if "%TARGET%"=="" set TARGET=all
+
+call python tests\test_regression_existing_new_app.py %TARGET%
+
+echo.
+echo ===========================================================================
+echo  Execution Completed.
+echo ===========================================================================
 pause
