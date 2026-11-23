@@ -1,5 +1,12 @@
 @echo off
 setlocal
+
+:: Remove any inspector or debugging flags so execution is never interrupted
+set PWDEBUG=
+set PLAYWRIGHT_INSPECT=
+set PW_TEST_DEBUG=
+set npm_config_pwdebug=
+
 echo ===========================================================================
 echo  ChartApps Regression Suite - Direct Automated Execution
 echo ===========================================================================

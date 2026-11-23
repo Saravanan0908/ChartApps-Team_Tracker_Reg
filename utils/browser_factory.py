@@ -1,6 +1,19 @@
 """Browser factory for launching Playwright with persistent context and anti-detection settings."""
 
+import os
 import json
+
+# Suppress Playwright Inspector and Debugger to ensure uninterrupted execution
+os.environ.pop("PWDEBUG", None)
+os.environ.pop("PLAYWRIGHT_INSPECT", None)
+os.environ.pop("npm_config_pwdebug", None)
+
+try:
+    import playwright._impl.utils.debug as _pw_debug
+    _pw_debug._debug_mode = ""
+except Exception:
+    pass
+
 from pathlib import Path
 from typing import Optional, Tuple
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright

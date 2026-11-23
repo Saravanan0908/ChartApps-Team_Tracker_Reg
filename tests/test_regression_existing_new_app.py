@@ -8,6 +8,18 @@ Scenario 2 (tag: new_app):      New App - Creation, Google OAuth & Consent, Spre
 
 import os
 import sys
+
+# Suppress Playwright Inspector and Debugger to ensure uninterrupted execution
+os.environ.pop("PWDEBUG", None)
+os.environ.pop("PLAYWRIGHT_INSPECT", None)
+os.environ.pop("npm_config_pwdebug", None)
+
+try:
+    import playwright._impl.utils.debug as _pw_debug
+    _pw_debug._debug_mode = ""
+except Exception:
+    pass
+
 import time
 import webbrowser
 from pathlib import Path
@@ -239,6 +251,16 @@ def test_02_new_app_creation_and_end_user_flow(
 def run_standalone(target_scenario: str = "all") -> None:
     """Execute regression scenarios sequentially or by target filter in standalone mode."""
     target_scenario = (os.environ.get("SCENARIO") or target_scenario).lower()
+
+    # Clear any debug/inspector flags to ensure uninterrupted execution
+    os.environ.pop("PWDEBUG", None)
+    os.environ.pop("PLAYWRIGHT_INSPECT", None)
+    os.environ.pop("npm_config_pwdebug", None)
+    try:
+        import playwright._impl.utils.debug as _pw_debug
+        _pw_debug._debug_mode = ""
+    except Exception:
+        pass
 
     print("=" * 75)
     print(f"Executing ChartApps Regression Suite (Scenario: {target_scenario.upper()} | Headless: {HEADLESS})")
