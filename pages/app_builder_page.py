@@ -38,89 +38,81 @@ class AppBuilderPage(BasePage):
         slug_input.fill(app_slug)
 
     def connect_google_account_if_prompted(self) -> None:
-        """Connect Google Account and handle all OAuth consent screens (Account selection, Continue, Next)."""
-        connect_btn = self.page.locator("button:has-text('Connect Your Google Account')").first
-        active_page = self.page
+        """Connect Google Account and handle OAuth consent steps:
+        1. Click 'Connect Your Google Account'
+        2. page.get_by_role("link", name="chartapps chartapps.com@gmail").click()
+        3. page.get_by_role("button", name="Continue").click()
+        4. page.get_by_role("button", name="Continue").click()
+        5. page.get_by_role("button", name="Next").click()
+        """
+        connect_btn = self.page.get_by_role("button", name="Connect Your Google Account")
+        if not connect_btn.is_visible(timeout=4000):
+            connect_btn = self.page.locator("button:has-text('Connect Your Google Account')").first
 
-        # Check if connect button is visible
-        if connect_btn.is_visible(timeout=5000):
+        active_page = self.page
+        if connect_btn.is_visible(timeout=3000):
             try:
-                # May open OAuth in a popup window or navigate in same tab
-                with self.page.expect_popup(timeout=4000) as popup_info:
+                with self.page.expect_popup(timeout=3000) as popup_info:
                     connect_btn.click()
                 active_page = popup_info.value
             except Exception:
                 connect_btn.click()
                 active_page = self.page
 
-        # Poll all open context pages to find the Google OAuth page
-        start_wait = time.time()
-        while time.time() - start_wait < 10:
-            for p in self.page.context.pages:
-                if not p.is_closed() and "google.com" in p.url:
-                    active_page = p
-                    break
-            if "google.com" in active_page.url:
+        # Wait for Google page to settle (check popup or current tab)
+        time.sleep(2)
+        for p in self.page.context.pages:
+            if not p.is_closed() and "google.com" in p.url:
+                active_page = p
                 break
-            time.sleep(1)
 
-        # If on Google Account selection screen, click chartapps.com@gmail.com
+        # Step 1: Select Google account link: "chartapps chartapps.com@gmail"
         try:
-            account_elem = active_page.locator("text=chartapps.com@gmail.com, text=chartapps.com, [data-email*='chartapps.com']").first
-            if account_elem.is_visible(timeout=4000):
-                account_elem.click()
+            account_link = active_page.get_by_role("link", name="chartapps chartapps.com@gmail")
+            if not account_link.is_visible(timeout=4000):
+                account_link = active_page.get_by_role("link", name=re.compile(r"chartapps.*@gmail", re.I))
+            if not account_link.is_visible(timeout=2000):
+                account_link = active_page.locator("text=chartapps.com@gmail.com, [data-email*='chartapps.com']").first
+            if account_link.is_visible(timeout=3000):
+                account_link.click()
                 active_page.wait_for_timeout(2000)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[INFO] Google account selection step: {e}")
 
-        # Handle the Consent Screens: Click Continue -> Continue -> Next until back on ChartApps
-        start_consent = time.time()
-        while time.time() - start_consent < 35:
-            # Check if redirected back to ChartApps
-            if "chartapps.app" in self.page.url and not any("google.com" in p.url for p in self.page.context.pages if not p.is_closed()):
-                break
+        # Step 2: First Continue button click
+        try:
+            cont1 = active_page.get_by_role("button", name="Continue")
+            if not cont1.is_visible(timeout=4000):
+                cont1 = active_page.locator("button:has-text('Continue'), [role='button']:has-text('Continue')").first
+            if cont1.is_visible(timeout=3000):
+                cont1.click()
+                active_page.wait_for_timeout(2000)
+        except Exception as e:
+            print(f"[INFO] First Continue click step: {e}")
 
-            target_page = None
-            for p in self.page.context.pages:
-                if not p.is_closed() and "google.com" in p.url:
-                    target_page = p
-                    break
-            if not target_page:
-                if "chartapps.app" in self.page.url:
-                    break
-                target_page = active_page if not active_page.is_closed() else self.page
+        # Step 3: Second Continue button click
+        try:
+            cont2 = active_page.get_by_role("button", name="Continue")
+            if not cont2.is_visible(timeout=4000):
+                cont2 = active_page.locator("button:has-text('Continue'), [role='button']:has-text('Continue')").first
+            if cont2.is_visible(timeout=3000):
+                cont2.click()
+                active_page.wait_for_timeout(2000)
+        except Exception as e:
+            print(f"[INFO] Second Continue click step: {e}")
 
-            # Check for Continue button (as shown in Google consent screen)
-            continue_btn = target_page.locator(AppBuilderLocators.GOOGLE_CONTINUE_SELECTOR).first
-            if continue_btn.is_visible(timeout=2500):
-                try:
-                    continue_btn.click()
-                    time.sleep(2)
-                    continue
-                except Exception:
-                    pass
+        # Step 4: Next button click
+        try:
+            next_btn = active_page.get_by_role("button", name="Next")
+            if not next_btn.is_visible(timeout=4000):
+                next_btn = active_page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
+            if next_btn.is_visible(timeout=3000):
+                next_btn.click()
+                active_page.wait_for_timeout(2000)
+        except Exception as e:
+            print(f"[INFO] Next button click step: {e}")
 
-            # Check for Next button
-            next_btn = target_page.locator(AppBuilderLocators.GOOGLE_NEXT_SELECTOR).first
-            if next_btn.is_visible(timeout=2000):
-                try:
-                    next_btn.click()
-                    time.sleep(2)
-                    continue
-                except Exception:
-                    pass
-
-            # Check for scope selection checkboxes if shown
-            checkboxes = target_page.locator("input[type='checkbox']").all()
-            for cb in checkboxes:
-                try:
-                    if not cb.is_checked():
-                        cb.check()
-                except Exception:
-                    pass
-
-            time.sleep(1)
-
+        # Return focus to ChartApps page
         self.page.bring_to_front()
         self.page.wait_for_timeout(2500)
 
