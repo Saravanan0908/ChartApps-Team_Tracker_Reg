@@ -268,6 +268,41 @@ class AppBuilderPage(BasePage):
         self.add_form_block_to_home()
         self.add_table_block_to_about()
 
+    def close_slider_popup(self, target_page: Page) -> None:
+        """Close the slider / drawer popup that opens when clicking a table row/cell."""
+        target_page.wait_for_timeout(500)
+        # 1. Try finding close button on slider/drawer
+        try:
+            close_btn = target_page.locator(
+                "button[aria-label*='Close' i], "
+                ".p-sidebar-close, .slider-close, .drawer-close, "
+                "[role='dialog'] button:has-text('Close'), "
+                "button:has-text('✕'), button:has-text('×')"
+            ).first
+            if close_btn.is_visible(timeout=1000):
+                close_btn.click()
+                target_page.wait_for_timeout(500)
+                return
+        except Exception:
+            pass
+
+        # 2. Try the empty icon buttons recorded in codegen
+        try:
+            empty_btns = target_page.get_by_role("button").filter(has_text=re.compile(r"^$"))
+            if empty_btns.count() >= 5:
+                empty_btns.nth(4).click()
+                target_page.wait_for_timeout(500)
+                return
+        except Exception:
+            pass
+
+        # 3. Dismiss via Escape key
+        try:
+            target_page.keyboard.press("Escape")
+            target_page.wait_for_timeout(300)
+        except Exception:
+            pass
+
     def select_date_picker_value(self, target_page: Page, selected_date: str) -> str:
         """Select current date in the form date picker via calendar popup, day cell, and input events."""
         now = datetime.now()
@@ -283,31 +318,30 @@ class AppBuilderPage(BasePage):
 
         if d_input.is_visible(timeout=3000):
             # 1. Click textbox to open calendar popup
-            try:
-                d_input.click(force=True)
-                target_page.wait_for_timeout(500)
-            except Exception:
-                pass
+            d_input.click()
+            target_page.wait_for_timeout(500)
 
             # 2. Click current day cell in the calendar overlay
             try:
                 day_cell = target_page.get_by_label(day_pattern)
                 if day_cell.first.is_visible(timeout=2000):
                     day_cell.first.click()
+                    target_page.wait_for_timeout(500)
                 else:
                     today_cell = target_page.locator(".flatpickr-day.today, .today, .p-datepicker-today, [aria-current='date']").first
                     if today_cell.is_visible(timeout=1000):
                         today_cell.click()
+                        target_page.wait_for_timeout(500)
             except Exception:
                 pass
 
-            # 3. Fill date value
+            # 3. Fill date value directly to ensure exact formatting
             try:
                 d_input.fill(selected_date)
             except Exception:
                 pass
 
-            # 4. Dispatch DOM events so Vue/reactive listeners update
+            # 4. Dispatch DOM events so Vue reactive listeners update
             try:
                 target_page.evaluate(
                     """([val]) => {
@@ -326,7 +360,7 @@ class AppBuilderPage(BasePage):
             except Exception:
                 pass
 
-            # 5. Dismiss calendar popup
+            # 5. Dismiss calendar popup so it closes before typing Title
             try:
                 target_page.keyboard.press("Escape")
                 target_page.wait_for_timeout(300)
@@ -350,18 +384,10 @@ class AppBuilderPage(BasePage):
             home_link.click()
             self.page.wait_for_timeout(1500)
 
-        # Optional datetime field if present
-        actual_datetime = ""
-        if datetime_str:
-            dt_input = self.page.get_by_role("textbox", name="yyyy-mm-dd HH:MM")
-            if dt_input.is_visible(timeout=2000):
-                dt_input.fill(datetime_str)
-                actual_datetime = dt_input.input_value() or datetime_str
-
-        # Fill date (Current Date) using calendar overlay & input handling
+        # 1. Select Current Date via popup (popup opens, date is clicked, popup closes)
         actual_date = self.select_date_picker_value(self.page, date_str)
 
-        # Fill text message and capture submitted value
+        # 2. Once the date popup closes, click and fill the Title / text input
         txt_input = self.page.get_by_role("textbox", name="Type here..")
         if not txt_input.is_visible(timeout=3000):
             txt_input = self.page.locator("input[placeholder*='Type here'], textarea[placeholder*='Type here']").first
@@ -377,10 +403,9 @@ class AppBuilderPage(BasePage):
         self.last_submitted_editor_data = {
             "date": actual_date,
             "text": actual_text,
-            "datetime": actual_datetime,
         }
 
-        # Dismiss any lingering popups before clicking submit
+        # 3. Dismiss any lingering popups before clicking submit
         self.page.keyboard.press("Escape")
         self.page.wait_for_timeout(300)
 
@@ -432,6 +457,9 @@ class AppBuilderPage(BasePage):
                 expect(date_cell.first).to_be_visible(timeout=5000)
                 try:
                     date_cell.first.click()
+                    target_page.wait_for_timeout(500)
+                    # Close the slider popup that opened when clicking the cell
+                    self.close_slider_popup(target_page)
                 except Exception:
                     pass
 
@@ -441,6 +469,9 @@ class AppBuilderPage(BasePage):
                 paginator.click()
         except Exception:
             pass
+
+        # Ensure slider popup is closed
+        self.close_slider_popup(target_page)
 
         return True
 
@@ -452,6 +483,10 @@ class AppBuilderPage(BasePage):
 
     def publish_and_get_public_url(self) -> str:
         """Publish app and configure public privacy settings, returning public URL."""
+        # Ensure any slider popup from table inspection is closed before clicking Publish
+        self.close_slider_popup(self.page)
+        self.page.wait_for_timeout(500)
+
         pub_btn = self.page.locator("button:has-text('Publish'), .publish-btn").first
         if pub_btn.is_visible(timeout=3000):
             pub_btn.click()
@@ -585,6 +620,10 @@ class AppBuilderPage(BasePage):
                 expected_snippet=self.last_submitted_enduser_data["text"],
                 page_obj=user_page,
             )
+
+            # Ensure any slider popup opened during inspection is closed
+            self.close_slider_popup(user_page)
+
             return self.last_submitted_enduser_data
         finally:
             user_page.close()
