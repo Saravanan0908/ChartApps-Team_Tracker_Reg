@@ -278,11 +278,6 @@ def run_standalone(target_scenario: str = "all") -> None:
             except Exception:
                 pass
 
-            # Local Debugging Pause / CodeGen
-            if not os.environ.get("CI"):
-                print("\n[INFO] Tests completed. Opening Playwright Inspector for manual debugging...")
-                page.pause()
-
         except Exception as e:
             print(f"\n[FAILURE] Regression test run failed: {e}")
             reports_dir = Path("reports/screenshots")
@@ -313,8 +308,10 @@ def run_standalone(target_scenario: str = "all") -> None:
                     webbrowser.open(report_path.as_uri())
             raise e
         finally:
-            # context.close()
-            pass
+            try:
+                context.close()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
