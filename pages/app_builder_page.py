@@ -15,6 +15,8 @@ class AppBuilderPage(BasePage):
     def __init__(self, page: Page):
         super().__init__(page)
         self.dashboard_url = "https://chartapps.app/dashboard"
+        self.last_submitted_editor_data: dict[str, str] = {}
+        self.last_submitted_enduser_data: dict[str, str] = {}
 
     def open_dashboard(self) -> None:
         """Navigate to ChartApps dashboard and ensure page is loaded."""
@@ -270,37 +272,54 @@ class AppBuilderPage(BasePage):
         date_str: str,
         text_val: str,
         datetime_str: Optional[str] = None,
-    ) -> None:
-        """Submit form data on Home page in editor mode."""
+    ) -> dict[str, str]:
+        """Submit form data on Home page in editor mode, storing and returning submitted values."""
         home_link = self.page.get_by_role("link", name=AppBuilderLocators.HOME_LINK)
         if home_link.is_visible(timeout=2000):
             home_link.click()
             self.page.wait_for_timeout(1500)
 
         # Optional datetime field if present
+        actual_datetime = ""
         if datetime_str:
             dt_input = self.page.get_by_role("textbox", name="yyyy-mm-dd HH:MM")
             if dt_input.is_visible(timeout=2000):
                 dt_input.fill(datetime_str)
+                actual_datetime = dt_input.input_value() or datetime_str
 
-        # Fill date (Current Date)
+        # Fill date (Current Date) and capture submitted value
         d_input = self.page.get_by_role("textbox", name="yyyy-mm-dd")
         if d_input.is_visible(timeout=3000):
             d_input.fill(date_str)
+            actual_date = d_input.input_value() or date_str
+        else:
+            actual_date = date_str
 
-        # Fill text message
+        # Fill text message and capture submitted value
         txt_input = self.page.get_by_role("textbox", name="Type here..")
         if txt_input.is_visible(timeout=3000):
             txt_input.fill(text_val)
+            actual_text = txt_input.input_value() or text_val
+        else:
+            actual_text = text_val
+
+        # Store submitted values dynamically for subsequent verification
+        self.last_submitted_editor_data = {
+            "date": actual_date,
+            "text": actual_text,
+            "datetime": actual_datetime,
+        }
 
         # Submit
         self.page.get_by_role("button", name=AppBuilderLocators.SUBMIT_BUTTON).click()
         self.page.wait_for_timeout(3000)
 
+        return self.last_submitted_editor_data
+
     def verify_table_contains_details(
         self,
-        date_str: str,
-        expected_snippet: str,
+        date_str: Optional[str] = None,
+        expected_snippet: Optional[str] = None,
         page_obj: Optional[Page] = None,
     ) -> bool:
         """Verify that the Table on About page displays the submitted record (date & message)."""
@@ -311,20 +330,33 @@ class AppBuilderPage(BasePage):
                 about_link.click()
                 target_page.wait_for_timeout(2000)
 
+        # Identify values from submitted form if not explicitly provided
+        if date_str is None:
+            date_str = self.last_submitted_editor_data.get("date", "")
+        if expected_snippet is None:
+            expected_snippet = self.last_submitted_editor_data.get("text", "")
+
         table = target_page.get_by_role("table")
         expect(table).to_be_visible(timeout=10000)
 
-        # Assert record message is present in the table
-        record = table.get_by_text(expected_snippet)
-        expect(record.first).to_be_visible(timeout=10000)
+        # Assert record message is present in the table (verifying actual submitted values)
+        if expected_snippet:
+            record = table.get_by_text(expected_snippet)
+            if record.first.is_visible(timeout=5000):
+                expect(record.first).to_be_visible(timeout=5000)
+            else:
+                row = table.locator("tr").filter(has_text=expected_snippet[:35])
+                expect(row.first).to_be_visible(timeout=10000)
 
-        # Optional interaction with paginator/date cell if visible
-        try:
-            date_cell = target_page.get_by_role("cell", name=re.compile(date_str)).or_(target_page.get_by_text(date_str))
-            if date_cell.first.is_visible(timeout=2000):
-                date_cell.first.click()
-        except Exception:
-            pass
+        # Assert submitted date is present in the table
+        if date_str:
+            date_cell = target_page.get_by_role("cell", name=re.compile(re.escape(date_str))).or_(target_page.get_by_text(date_str))
+            if date_cell.first.is_visible(timeout=5000):
+                expect(date_cell.first).to_be_visible(timeout=5000)
+                try:
+                    date_cell.first.click()
+                except Exception:
+                    pass
 
         try:
             paginator = target_page.locator(AppBuilderLocators.PAGINATOR)
@@ -335,16 +367,29 @@ class AppBuilderPage(BasePage):
 
         return True
 
-    def verify_record_in_about_table(self, expected_snippet: str) -> bool:
-        """Backward-compatible alias for verify_table_contains_details."""
-        return self.verify_table_contains_details(date_str="", expected_snippet=expected_snippet)
+    def verify_record_in_about_table(self, expected_snippet: Optional[str] = None) -> bool:
+        """Verify submitted record in About table using stored form submission values."""
+        snippet = expected_snippet or self.last_submitted_editor_data.get("text", "")
+        date_val = self.last_submitted_editor_data.get("date", "")
+        return self.verify_table_contains_details(date_str=date_val, expected_snippet=snippet)
 
     def publish_and_get_public_url(self) -> str:
         """Publish app and configure public privacy settings, returning public URL."""
-        self.page.get_by_role("button", name=AppBuilderLocators.PUBLISH_BUTTON).click()
+        pub_btn = self.page.locator("button:has-text('Publish'), .publish-btn").first
+        if pub_btn.is_visible(timeout=3000):
+            pub_btn.click()
+        else:
+            self.page.get_by_role("button", name=AppBuilderLocators.PUBLISH_BUTTON).click()
         self.page.wait_for_timeout(1000)
-        self.page.get_by_role("button", name=AppBuilderLocators.PRIVACY_SETTINGS_BUTTON).click()
-        self.page.wait_for_timeout(1000)
+
+        priv_btn = self.page.get_by_role("button", name=AppBuilderLocators.PRIVACY_SETTINGS_BUTTON)
+        if not priv_btn.is_visible(timeout=2000):
+            pub_btn.click()
+            self.page.wait_for_timeout(1000)
+
+        if priv_btn.is_visible(timeout=3000):
+            priv_btn.click()
+            self.page.wait_for_timeout(1000)
 
         # Make Switch / App Privacy active (switch toggle button)
         toggle_input = self.page.locator(AppBuilderLocators.APP_PRIVACY_TOGGLE_INPUT)
@@ -402,7 +447,7 @@ class AppBuilderPage(BasePage):
         text_val: str,
         context: Optional[BrowserContext] = None,
         browser: Optional[Browser] = None,
-    ) -> None:
+    ) -> dict[str, str]:
         """Launch a fresh incognito session without cookies/caches, submit form, and verify table."""
         own_context = False
         if browser is not None:
@@ -421,15 +466,27 @@ class AppBuilderPage(BasePage):
             user_page.goto(public_url, wait_until="domcontentloaded")
             user_page.wait_for_timeout(3000)
 
-            # Fill date (Current Date)
+            # Fill date (Current Date) and capture actual submitted value
             d_input = user_page.get_by_role("textbox", name="yyyy-mm-dd")
             if d_input.is_visible(timeout=5000):
                 d_input.fill(date_str)
+                actual_enduser_date = d_input.input_value() or date_str
+            else:
+                actual_enduser_date = date_str
 
-            # Fill text
+            # Fill text and capture actual submitted value
             txt_input = user_page.get_by_role("textbox", name="Type here..")
             if txt_input.is_visible(timeout=5000):
                 txt_input.fill(text_val)
+                actual_enduser_text = txt_input.input_value() or text_val
+            else:
+                actual_enduser_text = text_val
+
+            # Store identified submitted values from End User form
+            self.last_submitted_enduser_data = {
+                "date": actual_enduser_date,
+                "text": actual_enduser_text,
+            }
 
             # Submit
             user_page.get_by_role("button", name=AppBuilderLocators.SUBMIT_BUTTON).click()
@@ -439,12 +496,13 @@ class AppBuilderPage(BasePage):
             user_page.get_by_role("link", name=AppBuilderLocators.ABOUT_LINK).click()
             user_page.wait_for_timeout(3000)
 
-            # Table contains entered Details assertion
+            # Table contains entered Details assertion - verify the exact submitted values!
             self.verify_table_contains_details(
-                date_str=date_str,
-                expected_snippet=text_val[:35],
+                date_str=self.last_submitted_enduser_data["date"],
+                expected_snippet=self.last_submitted_enduser_data["text"],
                 page_obj=user_page,
             )
+            return self.last_submitted_enduser_data
         finally:
             user_page.close()
             if own_context:

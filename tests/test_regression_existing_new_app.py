@@ -183,12 +183,12 @@ def test_02_new_app_creation_and_end_user_flow(persistent_page: Page) -> None:
         # Step 8: Add Form Block & Submit in Editor Mode
         logger.step(8, "Add Form Block & Submit in Editor Mode", f"Adding Form Block on Home, configuring Date axis, and submitting record: '{data['editor_text'][:35]}...'")
         builder_page.add_form_block_to_home()
-        builder_page.submit_form_in_editor(
+        submitted_editor_data = builder_page.submit_form_in_editor(
             date_str=data["editor_date"],
             text_val=data["editor_text"],
             datetime_str=data.get("editor_datetime"),
         )
-        logger.passed(8, "Form block configured and data submitted in editor mode")
+        logger.passed(8, f"Form submitted in editor mode with Date='{submitted_editor_data['date']}', Text='{submitted_editor_data['text'][:30]}...'")
 
         # Step 9: Add Table Block to About Page
         logger.step(9, "Add Table Block to About Page", "Navigating to About page, adding Table block, and configuring teal styling")
@@ -198,10 +198,10 @@ def test_02_new_app_creation_and_end_user_flow(persistent_page: Page) -> None:
         # Step 10: Verify Data in About Table
         logger.step(10, "Verify Stored Data in Table", "Asserting submitted Editor Mode record appears in About page table")
         builder_page.verify_table_contains_details(
-            date_str=data["editor_date"],
-            expected_snippet="Editor Mode: This message for Regression Testing",
+            date_str=builder_page.last_submitted_editor_data["date"],
+            expected_snippet=builder_page.last_submitted_editor_data["text"],
         )
-        logger.passed(10, "Submitted record confirmed in About page table")
+        logger.passed(10, f"Submitted record confirmed in About page table (Date='{builder_page.last_submitted_editor_data['date']}')")
 
         # Step 11: Publish App & Set Privacy
         logger.step(11, "Publish App and Set Privacy", "Publishing app, making App Privacy switch active, and retrieving public URL")
@@ -210,14 +210,14 @@ def test_02_new_app_creation_and_end_user_flow(persistent_page: Page) -> None:
 
         # Step 12: End-User Submission & Cleanup
         logger.step(12, "End-User Verification & Cleanup", "Testing public app in fresh incognito context without cookies/caches, verifying Table, and deleting app")
-        builder_page.submit_and_verify_as_end_user(
+        submitted_enduser_data = builder_page.submit_and_verify_as_end_user(
             public_url=public_url,
             date_str=data["enduser_date"],
             text_val=data["enduser_text"],
             browser=builder_page.page.context.browser,
         )
         builder_page.delete_app_and_cleanup(app_name=app_name)
-        logger.passed(12, "End-user flow verified in isolated incognito context and test app cleaned up successfully")
+        logger.passed(12, f"End-user flow verified with Date='{submitted_enduser_data['date']}' and app cleaned up successfully")
 
     except Exception as exc:
         failed_step = len(logger.steps_record) + 1
