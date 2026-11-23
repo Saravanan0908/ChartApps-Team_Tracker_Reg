@@ -49,72 +49,57 @@ class AppBuilderPage(BasePage):
         if not connect_btn.is_visible(timeout=4000):
             connect_btn = self.page.locator("button:has-text('Connect Your Google Account')").first
 
-        active_page = self.page
         if connect_btn.is_visible(timeout=3000):
-            try:
-                with self.page.expect_popup(timeout=3000) as popup_info:
-                    connect_btn.click()
-                active_page = popup_info.value
-            except Exception:
-                connect_btn.click()
-                active_page = self.page
-
-        # Wait for Google page to settle (check popup or current tab)
-        time.sleep(2)
-        for p in self.page.context.pages:
-            if not p.is_closed() and "google.com" in p.url:
-                active_page = p
-                break
+            connect_btn.click()
+            self.page.wait_for_timeout(2500)
 
         # Step 1: Select Google account link: "chartapps chartapps.com@gmail"
         try:
-            account_link = active_page.get_by_role("link", name="chartapps chartapps.com@gmail")
+            account_link = self.page.get_by_role("link", name="chartapps chartapps.com@gmail")
             if not account_link.is_visible(timeout=4000):
-                account_link = active_page.get_by_role("link", name=re.compile(r"chartapps.*@gmail", re.I))
+                account_link = self.page.get_by_role("link", name=re.compile(r"chartapps.*@gmail", re.I))
             if not account_link.is_visible(timeout=2000):
-                account_link = active_page.locator("text=chartapps.com@gmail.com, [data-email*='chartapps.com']").first
+                account_link = self.page.locator("text=chartapps.com@gmail.com, [data-email*='chartapps.com']").first
             if account_link.is_visible(timeout=3000):
                 account_link.click()
-                active_page.wait_for_timeout(2000)
+                self.page.wait_for_timeout(2000)
         except Exception as e:
             print(f"[INFO] Google account selection step: {e}")
 
         # Step 2: First Continue button click
         try:
-            cont1 = active_page.get_by_role("button", name="Continue")
+            cont1 = self.page.get_by_role("button", name="Continue")
             if not cont1.is_visible(timeout=4000):
-                cont1 = active_page.locator("button:has-text('Continue'), [role='button']:has-text('Continue')").first
+                cont1 = self.page.locator("button:has-text('Continue'), [role='button']:has-text('Continue')").first
             if cont1.is_visible(timeout=3000):
                 cont1.click()
-                active_page.wait_for_timeout(2000)
+                self.page.wait_for_timeout(2000)
         except Exception as e:
             print(f"[INFO] First Continue click step: {e}")
 
         # Step 3: Second Continue button click
         try:
-            cont2 = active_page.get_by_role("button", name="Continue")
+            cont2 = self.page.get_by_role("button", name="Continue")
             if not cont2.is_visible(timeout=4000):
-                cont2 = active_page.locator("button:has-text('Continue'), [role='button']:has-text('Continue')").first
+                cont2 = self.page.locator("button:has-text('Continue'), [role='button']:has-text('Continue')").first
             if cont2.is_visible(timeout=3000):
                 cont2.click()
-                active_page.wait_for_timeout(2000)
+                self.page.wait_for_timeout(2000)
         except Exception as e:
             print(f"[INFO] Second Continue click step: {e}")
 
         # Step 4: Next button click
         try:
-            next_btn = active_page.get_by_role("button", name="Next")
+            next_btn = self.page.get_by_role("button", name="Next")
             if not next_btn.is_visible(timeout=4000):
-                next_btn = active_page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
+                next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
             if next_btn.is_visible(timeout=3000):
                 next_btn.click()
-                active_page.wait_for_timeout(2000)
+                self.page.wait_for_timeout(2500)
         except Exception as e:
             print(f"[INFO] Next button click step: {e}")
 
-        # Return focus to ChartApps page
-        self.page.bring_to_front()
-        self.page.wait_for_timeout(2500)
+        self.page.wait_for_timeout(2000)
 
     def select_google_spreadsheet(self, spreadsheet_name: str = "Regression Testing Automation") -> None:
         """Open Google Picker and select spreadsheet."""
