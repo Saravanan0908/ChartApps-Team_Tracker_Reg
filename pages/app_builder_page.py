@@ -285,21 +285,50 @@ class AppBuilderPage(BasePage):
 
     def publish_and_get_public_url(self) -> str:
         """Publish app and configure public privacy settings, returning public URL."""
-        self.page.get_by_role("button", name="Publish").click()
+        self.page.get_by_role("button", name=AppBuilderLocators.PUBLISH_BUTTON).click()
         self.page.wait_for_timeout(1000)
-        self.page.get_by_role("button", name="Privacy Settings").click()
+        self.page.get_by_role("button", name=AppBuilderLocators.PRIVACY_SETTINGS_BUTTON).click()
         self.page.wait_for_timeout(1000)
 
-        # Check App privacy
-        privacy_checkbox = self.page.get_by_role("checkbox", name="App privacy")
-        if privacy_checkbox.is_visible(timeout=2000) and not privacy_checkbox.is_checked():
-            privacy_checkbox.check()
+        # Make Switch / App Privacy active (switch toggle button)
+        toggle_input = self.page.locator(AppBuilderLocators.APP_PRIVACY_TOGGLE_INPUT)
+        toggle_label = self.page.locator(AppBuilderLocators.APP_PRIVACY_TOGGLE_LABEL)
+
+        is_active = False
+        try:
+            if toggle_input.count() > 0:
+                is_active = toggle_input.is_checked()
+            else:
+                cb = self.page.get_by_role("checkbox", name=AppBuilderLocators.APP_PRIVACY_CHECKBOX)
+                if cb.count() > 0:
+                    is_active = cb.is_checked()
+        except Exception:
+            is_active = False
+
+        if not is_active:
+            # Click the visible toggle switch label to activate
+            if toggle_label.is_visible(timeout=2000):
+                toggle_label.click()
+                self.page.wait_for_timeout(500)
+            elif toggle_input.count() > 0:
+                toggle_input.check(force=True)
+            else:
+                cb = self.page.get_by_role("checkbox", name=AppBuilderLocators.APP_PRIVACY_CHECKBOX)
+                if cb.is_visible(timeout=2000):
+                    cb.check(force=True)
+
+            # Ensure state is active; force check if needed (handles sr-only input)
+            try:
+                if toggle_input.count() > 0 and not toggle_input.is_checked():
+                    toggle_input.check(force=True)
+            except Exception:
+                pass
 
         self.page.get_by_role("button", name="Save").click()
         self.page.wait_for_timeout(1500)
 
         # Get Public URL from input or current origin
-        public_url_input = self.page.get_by_role("textbox", name="Enter public URL")
+        public_url_input = self.page.get_by_role("textbox", name=AppBuilderLocators.ENTER_PUBLIC_URL_INPUT)
         if public_url_input.is_visible(timeout=3000):
             url_val = public_url_input.input_value()
             if url_val:

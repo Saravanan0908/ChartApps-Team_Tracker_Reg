@@ -57,9 +57,11 @@ class AppBuilderLocators:
     SUBMIT_BUTTON = re.compile(r"Submit", re.IGNORECASE)
 
     # Publish & Privacy
-    PUBLISH_BUTTON = re.compile(r"Publish", re.IGNORECASE)
+    PUBLISH_BUTTON = re.compile(r"^Publish$", re.IGNORECASE)
     PRIVACY_SETTINGS_BUTTON = re.compile(r"Privacy Settings", re.IGNORECASE)
     APP_PRIVACY_CHECKBOX = re.compile(r"App privacy", re.IGNORECASE)
+    APP_PRIVACY_TOGGLE_INPUT = "#toggle-live-public-separate"
+    APP_PRIVACY_TOGGLE_LABEL = "label[for='toggle-live-public-separate']"
     ENTER_PUBLIC_URL_INPUT = re.compile(r"Enter public URL", re.IGNORECASE)
 
     # Deletion & Cleanup
