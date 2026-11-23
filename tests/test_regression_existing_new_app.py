@@ -11,8 +11,9 @@ import sys
 import time
 import webbrowser
 from pathlib import Path
+from typing import Optional
 import pytest
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, Playwright, sync_playwright
 
 # Ensure project root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -122,7 +123,10 @@ def test_01_existing_app_team_tracker_regression(persistent_page: Page) -> None:
 
 @pytest.mark.regression
 @pytest.mark.new_app
-def test_02_new_app_creation_and_end_user_flow(persistent_page: Page) -> None:
+def test_02_new_app_creation_and_end_user_flow(
+    persistent_page: Page,
+    playwright: Optional[Playwright] = None,
+) -> None:
     """Scenario 2: Create a new app, configure pages and blocks, submit form, verify as end-user, and cleanup."""
     logger = StepLogger(suite_name="Scenario 2: New App Creation & Workflow", total_steps=12)
     logger.start_suite()
@@ -214,6 +218,7 @@ def test_02_new_app_creation_and_end_user_flow(persistent_page: Page) -> None:
             public_url=public_url,
             date_str=data["enduser_date"],
             text_val=data["enduser_text"],
+            playwright=playwright,
             browser=builder_page.page.context.browser,
         )
         builder_page.delete_app_and_cleanup(app_name=app_name)
@@ -259,7 +264,7 @@ def run_standalone(target_scenario: str = "all") -> None:
                 print("\n" + "#" * 60)
                 print(">>> SCENARIO 2: NEW APP CREATION & WORKFLOW <<<")
                 print("#" * 60)
-                test_02_new_app_creation_and_end_user_flow(page)
+                test_02_new_app_creation_and_end_user_flow(page, playwright=playwright)
                 print("[SUCCESS] Scenario 2 Passed Successfully!\n")
 
             print("\n" + "=" * 75)

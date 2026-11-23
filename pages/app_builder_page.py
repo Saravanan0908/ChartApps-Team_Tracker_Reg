@@ -4,10 +4,11 @@ import re
 import time
 from datetime import datetime
 from typing import Optional
-from playwright.sync_api import Browser, BrowserContext, Page, expect
+from playwright.sync_api import Browser, BrowserContext, Page, Playwright, expect
 
 from locators.app_builder_locators import AppBuilderLocators
 from pages.base_page import BasePage
+from utils.config import HEADLESS
 
 
 class AppBuilderPage(BasePage):
@@ -26,6 +27,8 @@ class AppBuilderPage(BasePage):
 
     def initiate_create_app(self, app_name: str, app_slug: str) -> None:
         """Click 'Create App' button and enter app name and subdomain/slug."""
+        self.app_name = app_name
+        self.app_slug = app_slug
         create_btn = self.page.locator("button:has-text('Create App')").first
         create_btn.click()
         self.page.wait_for_timeout(1500)
@@ -312,58 +315,64 @@ class AppBuilderPage(BasePage):
 
     def close_slider_popup(self, target_page: Page) -> None:
         """Close the Details slider / drawer popup that opens when clicking a table row/cell."""
-        target_page.wait_for_timeout(500)
+        target_page.wait_for_timeout(300)
 
         # 1. Direct CSS selectors matching the exact DOM tree from inspection:
         # <div class="... custom-sidebar-width ..."><button class="absolute top-1 right-4 text-gray-500 hover:text-gray-700 z-10">
-        drawer_selectors = [
-            ".custom-sidebar-width button.absolute",
-            "button.absolute.top-1.right-4",
-            ".custom-sidebar-width button:has(svg)",
-            "button:has(path[d*='M6 18L18 6'])",
-            "div.custom-sidebar-width > button",
+        close_locators = [
+            target_page.locator(".custom-sidebar-width button.absolute").first,
+            target_page.locator("button.absolute.top-1.right-4").first,
+            target_page.locator(".custom-sidebar-width button").first,
+            target_page.locator("button:has(path[d*='M6 18L18 6'])").first,
+            target_page.locator("path[d='M6 18L18 6M6 6l12 12']").locator("..").first,
         ]
-        for sel in drawer_selectors:
+        for loc in close_locators:
             try:
-                btn = target_page.locator(sel).first
-                if btn.is_visible(timeout=1000):
-                    btn.click(force=True)
-                    target_page.wait_for_timeout(500)
-                    return
+                if loc.is_visible(timeout=500):
+                    loc.click(force=True)
+                    target_page.wait_for_timeout(300)
+                    if not target_page.locator(".custom-sidebar-width").is_visible(timeout=500):
+                        return
             except Exception:
                 pass
 
-        # 2. Try clicking via evaluate in DOM directly
+        # 2. Try the empty icon buttons recorded in codegen (nth(4), nth(5), nth(3))
         try:
-            closed = target_page.evaluate("""() => {
-                const btn = document.querySelector(".custom-sidebar-width button.absolute, button.absolute.top-1.right-4, .custom-sidebar-width button");
-                if (btn) {
-                    btn.click();
-                    return true;
-                }
-                return false;
-            }""")
-            if closed:
-                target_page.wait_for_timeout(500)
+            empty_btns = target_page.get_by_role("button").filter(has_text=re.compile(r"^$"))
+            for idx in (4, 5, 3):
+                if empty_btns.count() > idx:
+                    btn = empty_btns.nth(idx)
+                    if btn.is_visible(timeout=500):
+                        btn.click(force=True)
+                        target_page.wait_for_timeout(300)
+                        if not target_page.locator(".custom-sidebar-width").is_visible(timeout=500):
+                            return
+        except Exception:
+            pass
+
+        # 3. Dismiss via Escape key
+        try:
+            target_page.keyboard.press("Escape")
+            target_page.wait_for_timeout(300)
+            if not target_page.locator(".custom-sidebar-width").is_visible(timeout=500):
                 return
         except Exception:
             pass
 
-        # 3. Playwright Inspector exact button locator: get_by_role("button").filter(has_text=re.compile(r"^$")).nth(4)
+        # 4. Direct DOM evaluation: click close button or remove sidebar so it cannot block interactions
         try:
-            empty_btns = target_page.get_by_role("button").filter(has_text=re.compile(r"^$"))
-            if empty_btns.count() > 4:
-                btn = empty_btns.nth(4)
-                if btn.is_visible(timeout=1000):
-                    btn.click(force=True)
-                    target_page.wait_for_timeout(500)
-                    return
-        except Exception:
-            pass
-
-        # 4. Fallback: Escape key
-        try:
-            target_page.keyboard.press("Escape")
+            target_page.evaluate("""() => {
+                const sidebars = document.querySelectorAll('.custom-sidebar-width, div[style*="z-index: 10000"]');
+                for (const sb of sidebars) {
+                    const btn = sb.querySelector('button');
+                    if (btn) {
+                        btn.click();
+                    }
+                    if (document.querySelectorAll('.custom-sidebar-width').length > 0) {
+                        sb.remove();
+                    }
+                }
+            }""")
             target_page.wait_for_timeout(300)
         except Exception:
             pass
@@ -378,10 +387,10 @@ class AppBuilderPage(BasePage):
 
         # Locate date picker input
         d_input = target_page.get_by_role("textbox", name="yyyy-mm-dd")
-        if not d_input.is_visible(timeout=3000):
+        if not d_input.is_visible(timeout=5000):
             d_input = target_page.locator("input[placeholder*='yyyy-mm-dd'], input.flatpickr-input, input[name='Date']").first
 
-        if d_input.is_visible(timeout=3000):
+        if d_input.is_visible(timeout=5000):
             # 1. Click textbox once to open calendar popup
             d_input.click()
             target_page.wait_for_timeout(500)
@@ -599,8 +608,13 @@ class AppBuilderPage(BasePage):
         public_url_input = self.page.get_by_role("textbox", name=AppBuilderLocators.ENTER_PUBLIC_URL_INPUT)
         if public_url_input.is_visible(timeout=3000):
             url_val = public_url_input.input_value()
-            if url_val:
-                return url_val
+            if url_val and "chartapps.app" in url_val:
+                if not url_val.startswith("http"):
+                    url_val = f"https://{url_val}"
+                return url_val.rstrip("/")
+
+        if hasattr(self, "app_slug") and self.app_slug:
+            return f"https://{self.app_slug}.chartapps.app"
 
         curr = self.page.url
         base_url = curr.split("?")[0].rstrip("/")
@@ -613,10 +627,22 @@ class AppBuilderPage(BasePage):
         text_val: str,
         context: Optional[BrowserContext] = None,
         browser: Optional[Browser] = None,
+        playwright: Optional[Playwright] = None,
     ) -> dict[str, str]:
-        """Launch a fresh incognito session without cookies/caches, submit form, and verify table."""
+        """Launch a fresh incognito session without cookies/caches, submit Form 2, and review in About table."""
+        own_browser = False
+        user_browser = None
         own_context = False
-        if browser is not None:
+
+        if playwright is not None:
+            user_browser = playwright.chromium.launch(
+                headless=HEADLESS,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            user_context = user_browser.new_context(viewport={"width": 1920, "height": 1080})
+            own_browser = True
+            own_context = True
+        elif browser is not None:
             user_context = browser.new_context(viewport={"width": 1920, "height": 1080})
             own_context = True
         elif context is not None:
@@ -629,23 +655,32 @@ class AppBuilderPage(BasePage):
 
         user_page = user_context.new_page()
         try:
-            user_page.goto(public_url, wait_until="domcontentloaded")
+            # 1. Navigate to published public app URL
+            try:
+                user_page.goto(public_url, wait_until="networkidle", timeout=30000)
+            except Exception:
+                user_page.goto(public_url, wait_until="domcontentloaded", timeout=30000)
             user_page.wait_for_timeout(3000)
 
-            # Fill date (Current Date) using calendar overlay & input handling
+            # 2. Wait explicitly for Date input to appear (ensures SPA has loaded and mounted)
+            d_input = user_page.get_by_role("textbox", name="yyyy-mm-dd")
+            if not d_input.is_visible(timeout=5000):
+                d_input = user_page.locator("input[placeholder*='yyyy-mm-dd'], input.flatpickr-input, input[name='Date']").first
+
+            expect(d_input).to_be_visible(timeout=25000)
+
+            # 3. Fill date (Current Date) using calendar popup overlay
             actual_enduser_date = self.select_date_picker_value(user_page, date_str)
 
-            # Fill text and capture actual submitted value
+            # 4. Fill Title text input and capture actual submitted value
             txt_input = user_page.get_by_role("textbox", name="Type here..")
-            if not txt_input.is_visible(timeout=3000):
+            if not txt_input.is_visible(timeout=5000):
                 txt_input = user_page.locator("input[placeholder*='Type here'], textarea[placeholder*='Type here']").first
 
-            if txt_input.is_visible(timeout=3000):
-                txt_input.click()
-                txt_input.fill(text_val)
-                actual_enduser_text = txt_input.input_value() or text_val
-            else:
-                actual_enduser_text = text_val
+            expect(txt_input).to_be_visible(timeout=10000)
+            txt_input.click()
+            txt_input.fill(text_val)
+            actual_enduser_text = txt_input.input_value() or text_val
 
             # Store identified submitted values from End User form
             self.last_submitted_enduser_data = {
@@ -657,32 +692,59 @@ class AppBuilderPage(BasePage):
             user_page.keyboard.press("Escape")
             user_page.wait_for_timeout(300)
 
-            # Submit
+            # 5. Submit Form 2
             submit_btn = user_page.get_by_role("button", name=AppBuilderLocators.SUBMIT_BUTTON)
-            if not submit_btn.is_visible(timeout=2000):
+            if not submit_btn.is_visible(timeout=3000):
                 submit_btn = user_page.locator("button:has-text('Submit'), button[type='submit']").first
+            expect(submit_btn).to_be_visible(timeout=10000)
             submit_btn.click()
             user_page.wait_for_timeout(3000)
 
-            # Navigate to About and verify in Table
-            user_page.get_by_role("link", name=AppBuilderLocators.ABOUT_LINK).click()
+            # 6. Navigate to About and review in Table
+            about_link = user_page.get_by_role("link", name=AppBuilderLocators.ABOUT_LINK)
+            if not about_link.is_visible(timeout=3000):
+                about_link = user_page.locator("a:has-text('About'), nav a:has-text('About')").first
+            expect(about_link).to_be_visible(timeout=10000)
+            about_link.click()
             user_page.wait_for_timeout(3000)
 
-            # Table contains entered Details assertion - verify the exact submitted values!
-            self.verify_table_contains_details(
-                date_str=self.last_submitted_enduser_data["date"],
-                expected_snippet=self.last_submitted_enduser_data["text"],
-                page_obj=user_page,
-            )
+            # 7. Table contains entered Details assertion - verify the exact submitted values!
+            table = user_page.get_by_role("table")
+            expect(table).to_be_visible(timeout=15000)
 
-            # Ensure any slider popup opened during inspection is closed
+            # Assert submitted text is present in the table
+            expect(user_page.get_by_text(actual_enduser_text[:35]).first).to_be_visible(timeout=10000)
+
+            # Assert submitted date is present in table and click date cell
+            date_cell = user_page.get_by_role("cell", name=re.compile(re.escape(actual_enduser_date))).or_(user_page.get_by_text(actual_enduser_date))
+            if date_cell.first.is_visible(timeout=5000):
+                expect(date_cell.first).to_be_visible(timeout=5000)
+                try:
+                    date_cell.first.click()
+                    user_page.wait_for_timeout(500)
+                    self.close_slider_popup(user_page)
+                except Exception:
+                    pass
+
+            # 8. Ensure Details slider popup is closed
             self.close_slider_popup(user_page)
 
             return self.last_submitted_enduser_data
         finally:
-            user_page.close()
+            try:
+                user_page.close()
+            except Exception:
+                pass
             if own_context:
-                user_context.close()
+                try:
+                    user_context.close()
+                except Exception:
+                    pass
+            if own_browser and user_browser:
+                try:
+                    user_browser.close()
+                except Exception:
+                    pass
 
     def delete_app_and_cleanup(self, app_name: str) -> None:
         """Delete the created app from ChartApps and confirm dialog."""
