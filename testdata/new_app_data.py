@@ -36,3 +36,5 @@ class NewAppTestData:
             "enduser_date": date_iso,
             "enduser_text": f"This is from the end user access form submition - {time_hms}",
         }
+
+<div role="button" class="goog-inline-block jfk-button jfk-button-action picker-select-control-enabled" id="picker:ap:0" guidedhelpid="ghid-psc" aria-disabled="false" tabindex="0" style="user-select: none;">Select</div>

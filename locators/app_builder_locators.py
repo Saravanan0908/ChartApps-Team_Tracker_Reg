@@ -26,6 +26,7 @@ class AppBuilderLocators:
     SPREADSHEET_OPTION_NAME = "Regression Testing Automation"
     SPREADSHEET_IFRAME_CSS = "iframe[src*='picker'], iframe[name*='picker'], iframe"
     SELECT_BUTTON = re.compile(r"Select", re.IGNORECASE)
+    PICKER_SELECT_CONTROL = "[role='button']:has-text('Select'), .picker-select-control-enabled, div.jfk-button:has-text('Select'), button:has-text('Select')"
     DEFAULT_SHEET = "User"
     DEFAULT_NAME_COL = "Name "
     DEFAULT_EMAIL_COL = "Email"

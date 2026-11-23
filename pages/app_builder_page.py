@@ -114,13 +114,23 @@ class AppBuilderPage(BasePage):
                 picker_frame = frame
                 break
 
+        select_selector = AppBuilderLocators.PICKER_SELECT_CONTROL
+
         if picker_frame:
             picker_frame.locator(f"[role='option']:has-text('{spreadsheet_name}')").first.click()
-            picker_frame.locator("button:has-text('Select')").first.click()
+            self.page.wait_for_timeout(1000)
+            select_btn = picker_frame.get_by_role("button", name="Select")
+            if not select_btn.is_visible(timeout=2000):
+                select_btn = picker_frame.locator(select_selector).first
+            select_btn.click()
         else:
             picker_locator = self.page.frame_locator(AppBuilderLocators.SPREADSHEET_IFRAME_CSS).first
             picker_locator.locator(f"[role='option']:has-text('{spreadsheet_name}')").first.click()
-            picker_locator.locator("button:has-text('Select')").first.click()
+            self.page.wait_for_timeout(1000)
+            select_btn = picker_locator.get_by_role("button", name="Select")
+            if not select_btn.is_visible(timeout=2000):
+                select_btn = picker_locator.locator(select_selector).first
+            select_btn.click()
 
         self.page.wait_for_timeout(2500)
 
