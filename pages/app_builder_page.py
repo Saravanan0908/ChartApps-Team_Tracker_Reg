@@ -114,22 +114,22 @@ class AppBuilderPage(BasePage):
                 picker_frame = frame
                 break
 
-        select_selector = AppBuilderLocators.PICKER_SELECT_CONTROL
+        select_selector = "[role='button']:has-text('Select'), .picker-select-control-enabled, div:text-is('Select'), button:has-text('Select')"
 
         if picker_frame:
             picker_frame.locator(f"[role='option']:has-text('{spreadsheet_name}')").first.click()
             self.page.wait_for_timeout(1000)
-            select_btn = picker_frame.get_by_role("button", name="Select")
+            select_btn = picker_frame.locator(select_selector).first
             if not select_btn.is_visible(timeout=2000):
-                select_btn = picker_frame.locator(select_selector).first
+                select_btn = picker_frame.get_by_role("button", name="Select")
             select_btn.click()
         else:
-            picker_locator = self.page.frame_locator(AppBuilderLocators.SPREADSHEET_IFRAME_CSS).first
+            picker_locator = self.page.frame_locator("iframe").first
             picker_locator.locator(f"[role='option']:has-text('{spreadsheet_name}')").first.click()
             self.page.wait_for_timeout(1000)
-            select_btn = picker_locator.get_by_role("button", name="Select")
+            select_btn = picker_locator.locator(select_selector).first
             if not select_btn.is_visible(timeout=2000):
-                select_btn = picker_locator.locator(select_selector).first
+                select_btn = picker_locator.get_by_role("button", name="Select")
             select_btn.click()
 
         self.page.wait_for_timeout(2500)
