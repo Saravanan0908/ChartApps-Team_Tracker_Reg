@@ -154,17 +154,44 @@ class AppBuilderPage(BasePage):
                     except Exception as e:
                         print(f"[DEBUG] Password check exception: {e}")
 
-                    # 3. Account Chooser TILES only (data-identifier / data-email attributes).
-                    #    IMPORTANT: Do NOT use get_by_role("link") here — the
-                    #    "chartapps.com@gmail.com selected. Switch account" link on the
-                    #    consent screen is NOT a tile and clicking it loops forever.
-                    #    Real chooser tiles always carry data-identifier or data-authuser attrs.
+                    # D. Continue / Allow FIRST — before account tile check.
+                    #    Covers ALL consent screens:
+                    #    - "You're signing back in to ChartApps"            -> Continue
+                    #    - "ChartApps wants access to your Google Account"  -> Continue / Allow
+                    #    Also handles "Scroll down" button that may block the click.
+                    try:
+                        cont_btn = oauth_page.locator(
+                            "button:has-text('Continue'), "
+                            "button:has-text('Allow'), "
+                            "[role='button']:has-text('Continue'), "
+                            "[role='button']:has-text('Allow')"
+                        ).first
+                        if cont_btn.is_visible(timeout=1500):
+                            # Scroll page first if needed
+                            try:
+                                scroll_btn = oauth_page.locator("button:has-text('Scroll down')").first
+                                if scroll_btn.is_visible(timeout=500):
+                                    print("[INFO] Scrolling consent page before clicking Continue...")
+                                    scroll_btn.click()
+                                    oauth_page.wait_for_timeout(800)
+                            except Exception:
+                                pass
+                            btn_text = cont_btn.inner_text().strip()
+                            print(f"[INFO] Clicking '{btn_text}' on Google OAuth consent screen...")
+                            cont_btn.click()
+                            oauth_page.wait_for_timeout(2500)
+                            continue
+                    except Exception:
+                        pass
+
+                    # E. Account chooser TILES — only reached when no Continue/Allow visible.
+                    #    Tightly-scoped to li[data-identifier] / [data-email] only.
+                    #    Do NOT use div[data-authuser] — matches consent page elements too.
                     try:
                         account_tile = oauth_page.locator(
-                            "[data-identifier*='chartapps'], "
+                            "li[data-identifier*='chartapps'], "
                             "[data-email*='chartapps'], "
-                            "div[data-authuser], "
-                            "li[data-identifier]"
+                            "[data-identifier*='chartapps']"
                         ).first
                         if account_tile.is_visible(timeout=1000):
                             label = (account_tile.get_attribute("data-identifier")
@@ -176,7 +203,7 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # 4. Consent Screen Checkboxes
+                    # F. Consent Screen Checkboxes
                     try:
                         checkboxes = oauth_page.locator("input[type='checkbox']:not(:checked)")
                         if checkboxes.count() > 0:
@@ -188,25 +215,7 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # 5. Consent Screen "Continue" button
-                    #    Covers both normal consent AND "You're signing back in to ChartApps"
-                    try:
-                        cont_btn = oauth_page.locator(
-                            "button:has-text('Continue'), "
-                            "[role='button']:has-text('Continue'), "
-                            "div[role='button']:has-text('Continue'), "
-                            "button:has-text('Allow'), "
-                            "[role='button']:has-text('Allow')"
-                        ).first
-                        if cont_btn.is_visible(timeout=2000):
-                            print(f"[INFO] Clicking consent/signing-back-in button on Google OAuth screen...")
-                            cont_btn.click()
-                            oauth_page.wait_for_timeout(2500)
-                            continue
-                    except Exception:
-                        pass
-
-                    # 6. Consent Screen "Next" button (ONLY if NOT on email/password input screens)
+                    # G. Next button (non-email/password screens only)
                     try:
                         if not is_email_screen and not is_pwd_screen:
                             next_consent_btn = oauth_page.locator(
@@ -221,7 +230,8 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                self.page.wait_for_timeout(1000)
+                oauth_page.wait_for_timeout(1000)
+
 
         # Step D: Ensure browser has navigated back to ChartApps dashboard (NOT Google)
         print("[INFO] Waiting for navigation back to ChartApps dashboard...", flush=True)
