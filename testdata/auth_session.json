@@ -401,120 +401,138 @@
       "sameSite": "Lax"
     },
     {
-      "name": "__Host-GAPS",
-      "value": "1:unTWG_L2dTlKGCQbos646JRKw_YsgcnVTdAYbfGxJ7DvE8vJCYHMVxt1GqDEc6Dj7smMdfy5B0JMhtpwGO3PobfrqZwy1w:hjQX_Mwv4CJDci2J",
+      "name": "OTZ",
+      "value": "8885115_34_34__34_",
       "domain": "accounts.google.com",
       "path": "/",
-      "expires": 1829970811.991795,
+      "expires": 1798002879,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "COMPASS",
+      "value": "photos-fife=CgAQrdOU2AYaTgAJa4lXejslvXRR6CIspqM74lwr1RWhMYyi_3Vg8AoDnzj-ZErb44rzScTVXGiIy9hurej5nS_1ow8WRs9UYt3iQc_E9Xt2AlzqdMlOzTAB",
+      "domain": "lh3.googleusercontent.com",
+      "path": "/",
+      "expires": 1796360861.394795,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "__Host-GAPS",
+      "value": "1:uUbcGy0Bo-_K3cmblRXtKKT44CzxzDwscrJD4LDmqpAr5wuwvVgd_c19dDEetWuFypTVmeQzTqf5B1WNKb5RTffj7QhZzA:Ghj5GDYSMeWk_Vjp",
+      "domain": "accounts.google.com",
+      "path": "/",
+      "expires": 1830057368.011605,
       "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"
     },
     {
-      "name": "__Secure-1PSIDTS",
-      "value": "sidts-CjYBnJZzauaREe99GQqVQqHfmKm4Frz2dgTFZlYY4xqSf7xkzzJfXavoOchgrk85CC_EYXjGfG0QAA",
+      "name": "twk_uuid_67e38e6a491729190b2a55f6",
+      "value": "%7B%22uuid%22%3A%221.1vXt7JbTgcVu7ULOqP2Kg7si5emJ4Hm291vn1PS7KsBsPGWFAJ524DgcB1nBTBUTe7K8EIRgpKk0JuX3O1mdAT2fkkismCJSaxBMP0MAZZA71G8xsS3SCha%22%2C%22version%22%3A3%2C%22domain%22%3A%22chartapps.app%22%2C%22ts%22%3A1795497407339%7D",
+      "domain": ".chartapps.app",
+      "path": "/",
+      "expires": 1811049407,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "NID",
+      "value": "CoQCCAEStgEBM9Agl1z5kYrxevcnzdMpYFBYZmE6asH8MQwhzZunTwTJcPCE0sa9LPQa7bBl6agr_qzaY5QBwEoug27Px4nNWXoRUEOip6ds7uUmLZr7oMXVm1UV2pSifeoMVZJG6_QaedZMv-I3I6fXg-erVTj7dDmwBbXhj-AFgRctUWiWLtHfMF3Di5r65hq-W8TJxsdyPtvUpatgypbVcu2yShh4_7zGfKqYJvuVXuInfE3yoz1H8IGnvSgBMkUBcEpCz7XB2xsXhysBuimUHk_df2yoehI0JTCqMDecO9gb9ZWofCUxPsFPWhiBsULHK0eEZ-YR7_B5bycUjOpNSeHHjwE",
       "domain": ".google.com",
       "path": "/",
-      "expires": 1826946812.385075,
+      "expires": 1811324494.971187,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "__Secure-1PSIDTS",
+      "value": "sidts-CjYBnJZzakxDH-LdHXaxCB5WwwqiCVvWK7HDWrgffsvKV3fQxZ9tPoAZUmzTgTtw1YG5VR1GJqwQAA",
+      "domain": ".google.com",
+      "path": "/",
+      "expires": 1827049295.267145,
       "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"
     },
     {
       "name": "__Secure-1PSIDRTS",
-      "value": "sidts-CjYBnJZzauaREe99GQqVQqHfmKm4Frz2dgTFZlYY4xqSf7xkzzJfXavoOchgrk85CC_EYXjGfG0QAA",
+      "value": "sidts-CjYBnJZzakxDH-LdHXaxCB5WwwqiCVvWK7HDWrgffsvKV3fQxZ9tPoAZUmzTgTtw1YG5VR1GJqwQAA",
       "domain": ".google.com",
       "path": "/",
-      "expires": 1795411412.385598,
+      "expires": 1795513895.26753,
       "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"
     },
     {
       "name": "__Secure-3PSIDTS",
-      "value": "sidts-CjYBnJZzauaREe99GQqVQqHfmKm4Frz2dgTFZlYY4xqSf7xkzzJfXavoOchgrk85CC_EYXjGfG0QAA",
+      "value": "sidts-CjYBnJZzakxDH-LdHXaxCB5WwwqiCVvWK7HDWrgffsvKV3fQxZ9tPoAZUmzTgTtw1YG5VR1GJqwQAA",
       "domain": ".google.com",
       "path": "/",
-      "expires": 1826946812.385935,
+      "expires": 1827049295.267647,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "__Secure-3PSIDRTS",
-      "value": "sidts-CjYBnJZzauaREe99GQqVQqHfmKm4Frz2dgTFZlYY4xqSf7xkzzJfXavoOchgrk85CC_EYXjGfG0QAA",
+      "value": "sidts-CjYBnJZzakxDH-LdHXaxCB5WwwqiCVvWK7HDWrgffsvKV3fQxZ9tPoAZUmzTgTtw1YG5VR1GJqwQAA",
       "domain": ".google.com",
       "path": "/",
-      "expires": 1795411412.386268,
+      "expires": 1795513895.268288,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
     },
     {
       "name": "SIDCC",
-      "value": "APD_SKH5LEJbwYizgSoNoDVr-jALDFhT9Cfcr-TqOyLzp5JD1V6bDKEBXEZRm7Mbt4n-YgCjFA",
+      "value": "APD_SKGApNwkEOwwVB_xveMHoxTbkA8rtqLDsqWDPKnzSTd83abORn6oxWbOadk9S3RGG0z8-A",
       "domain": ".google.com",
       "path": "/",
-      "expires": 1826946812.386554,
+      "expires": 1827049295.432495,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "__Secure-1PSIDCC",
-      "value": "APD_SKFgNd2Y805LVC-EAfFMhucg1AW4U8h37s416MFOXlDuhkfn7YT5r1_alt9v40_FfTKG",
+      "value": "APD_SKEK-Kxw7s-mUBdTPtAoU98hLClSC1cCuySLPDlUJgd6q8xIUpY6nM5uCxObt7wmsX30",
       "domain": ".google.com",
       "path": "/",
-      "expires": 1826946812.386756,
+      "expires": 1827049295.432775,
       "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"
     },
     {
       "name": "__Secure-3PSIDCC",
-      "value": "APD_SKGDH_3Cye-0yc1Zj7Vd36x4DhwuMtOmbXFMKUZ5VfxPCqTlKIrWOwHIleWqJMniJxgE",
+      "value": "APD_SKGiPNjm_QmTMWdDOcTy3e7BBZM7CRzpCRe5tEskb29vO1i1tVKi6g8I__X1bYRG00US",
       "domain": ".google.com",
       "path": "/",
-      "expires": 1826946812.386917,
+      "expires": 1827049295.433006,
       "httpOnly": true,
       "secure": true,
       "sameSite": "None"
-    },
-    {
-      "name": "twk_idm_key",
-      "value": "HecciMpzar0XBd3iHq0xY",
-      "domain": "chartapps.app",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "TawkConnectionTime",
-      "value": "0",
-      "domain": "chartapps.app",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "twk_uuid_67e38e6a491729190b2a55f6",
-      "value": "%7B%22uuid%22%3A%221.1vXt7JbTgcVu7ULOqP2Kg7si5emJ4Hm291vn1PS7KsBsPGWFAJ524DgcB1nBTBUTe7K8EIRgpKk0JuX3O1mdAT2fkkismCJSaxBMP0MAZZA71G8xsS3SCha%22%2C%22version%22%3A3%2C%22domain%22%3A%22chartapps.app%22%2C%22ts%22%3A1795410814455%7D",
-      "domain": ".chartapps.app",
-      "path": "/",
-      "expires": 1810962814,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "Lax"
     }
   ],
   "origins": [
     {
       "origin": "https://chartapps.app",
       "localStorage": [
+        {
+          "name": "dashboardPopup_v1_ai_integration",
+          "value": "true"
+        },
+        {
+          "name": "dashboardFormData",
+          "value": "{\"appName\":\"\",\"subdomain\":\"\"}"
+        },
         {
           "name": "hasVisitedBefore",
           "value": "true"
@@ -524,16 +542,16 @@
           "value": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InZpc2l0b3ItYXBwbGljYXRpb24tc2VydmVyLTIwMjEwMjIifQ.eyJwaWQiOiI2N2UzOGU2YTQ5MTcyOTE5MGIyYTU1ZjYiLCJ2aWQiOiI2N2UzOGU2YTQ5MTcyOTE5MGIyYTU1ZjYtbzdLZUhTTEtzcktVbG9FZ1R5X0pzIiwic2lkIjoiNmIwM2NiNzg5MzA1ZTIwMzUwMWIwOGZjIiwiaWF0IjoxNzk1NDEwODA4LCJleHAiOjE3OTU0MTI2MDgsImp0aSI6Ik1ITFJDLThibUZHNXZkaTFBMkNzOCJ9.hJGspuPSPpvuZWaTl0bAGoAQH8yg2BQWzAj99VnSCYhk4JIKH6ENzPdVDSq9yu33Iw7UXdvflNIVBLLBFdBCCQ"
         },
         {
+          "name": "auth._token_expiration.local",
+          "value": "1803186810000"
+        },
+        {
           "name": "auth.redirect",
           "value": "/dashboard"
         },
         {
           "name": "twk_67e38e6a491729190b2a55f6",
           "value": "vsb19.tawk.to"
-        },
-        {
-          "name": "auth._token_expiration.local",
-          "value": "1803186810000"
         },
         {
           "name": "auth.strategy",

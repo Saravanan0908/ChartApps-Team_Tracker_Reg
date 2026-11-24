@@ -209,24 +209,24 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # E. Account chooser TILES — only reached when no Continue/Allow visible.
-                    #    Tightly-scoped to li[data-identifier] / [data-email] only.
-                    #    Do NOT use div[data-authuser] — matches consent page elements too.
-                    try:
-                        account_tile = oauth_page.locator(
-                            "li[data-identifier*='chartapps'], "
-                            "[data-email*='chartapps'], "
-                            "[data-identifier*='chartapps']"
-                        ).first
-                        if account_tile.is_visible(timeout=1000):
-                            label = (account_tile.get_attribute("data-identifier")
-                                     or account_tile.get_attribute("data-email") or "chartapps account")
-                            print(f"[INFO] Clicking account chooser tile: {label}...")
-                            account_tile.click()
-                            oauth_page.wait_for_timeout(2000)
-                            continue
-                    except Exception:
-                        pass
+                    # E. Account chooser TILES — only reached when no Continue/Allow visible and NOT on a challenge page.
+                    #    Tightly-scoped to account chooser list items only.
+                    #    Guarded against challenge/error pages where email text is displayed as label.
+                    if "/challenge" not in oauth_page.url:
+                        try:
+                            account_tile = oauth_page.locator(
+                                "li[data-identifier*='chartapps'], "
+                                "div[data-identifier*='chartapps']"
+                            ).first
+                            if account_tile.is_visible(timeout=1000):
+                                label = (account_tile.get_attribute("data-identifier")
+                                         or account_tile.get_attribute("data-email") or "chartapps account")
+                                print(f"[INFO] Clicking account chooser tile: {label}...")
+                                account_tile.click()
+                                oauth_page.wait_for_timeout(2000)
+                                continue
+                        except Exception:
+                            pass
 
                     # F. Consent Screen Checkboxes
                     try:
