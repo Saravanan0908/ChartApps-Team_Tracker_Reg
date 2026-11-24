@@ -60,34 +60,6 @@ def launch_persistent_browser(
     # it uses the SQLite database in user_data_dir.
     context = playwright.chromium.launch_persistent_context(**launch_kwargs)
 
-    # Anti-bot stealth initialization: properly delete navigator.webdriver and populate chrome runtime
-    context.add_init_script("""
-        try {
-            const newProto = Object.getPrototypeOf(navigator);
-            delete newProto.webdriver;
-        } catch (e) {}
-        try {
-            delete navigator.webdriver;
-        } catch (e) {}
-        try {
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined,
-                configurable: true
-            });
-        } catch (e) {}
-
-        if (!window.chrome) {
-            window.chrome = {};
-        }
-        if (!window.chrome.runtime) {
-            window.chrome.runtime = {
-                PlatformOs: { WIN: 'win', MAC: 'mac', ANDROID: 'android', LINUX: 'linux' },
-                PlatformArch: { X86_64: 'x86-64', ARM64: 'arm64' },
-                OnInstalledReason: { CHROME_UPDATE: 'chrome_update' }
-            };
-        }
-    """)
-
     # Inject saved cookies and localStorage from storage_state.json if available
     storage_state_file = profile_dir / "storage_state.json"
     target_state = storage_state_file if storage_state_file.exists() else (STORAGE_STATE_PATH if STORAGE_STATE_PATH.exists() else None)
@@ -102,7 +74,14 @@ def launch_persistent_browser(
                 state_data = json.load(f)
                 cookies = state_data.get("cookies", [])
                 if cookies:
-                    context.add_cookies(cookies)
+                    import time
+                    now = time.time()
+                    valid_cookies = [
+                        c for c in cookies
+                        if c.get("expires", -1) in (-1, None) or c.get("expires", 0) > now
+                    ]
+                    if valid_cookies:
+                        context.add_cookies(valid_cookies)
 
                 # Inject localStorage entries
                 for origin_data in state_data.get("origins", []):
@@ -175,32 +154,6 @@ def create_browser_and_page(
 
     browser: Browser = playwright.chromium.launch(**launch_kwargs)
     context: BrowserContext = browser.new_context(**context_kwargs)
-    context.add_init_script("""
-        try {
-            const newProto = Object.getPrototypeOf(navigator);
-            delete newProto.webdriver;
-        } catch (e) {}
-        try {
-            delete navigator.webdriver;
-        } catch (e) {}
-        try {
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined,
-                configurable: true
-            });
-        } catch (e) {}
-
-        if (!window.chrome) {
-            window.chrome = {};
-        }
-        if (!window.chrome.runtime) {
-            window.chrome.runtime = {
-                PlatformOs: { WIN: 'win', MAC: 'mac', ANDROID: 'android', LINUX: 'linux' },
-                PlatformArch: { X86_64: 'x86-64', ARM64: 'arm64' },
-                OnInstalledReason: { CHROME_UPDATE: 'chrome_update' }
-            };
-        }
-    """)
     page: Page = context.new_page()
 
     # Maximize the OS window via Chrome DevTools Protocol when running in headed mode

@@ -23,27 +23,120 @@ class AppBuilderPage(BasePage):
         self.last_submitted_enduser_data: dict[str, str] = {}
 
     def open_dashboard(self) -> None:
-        """Navigate to ChartApps dashboard and ensure page is loaded."""
+        """Navigate to ChartApps dashboard and ensure authenticated session.
+        
+        Validates authentication and performs automated sign-in if the session
+        has expired or is unauthenticated, saving/merging cookies to storage state.
+        """
         self.page.goto(self.dashboard_url, wait_until="domcontentloaded")
-        self.page.wait_for_timeout(2000)
+        self.page.wait_for_timeout(1000)
+
+        # Elements indicating dashboard vs unauthenticated login
+        email_loc = self.page.locator('input[type="email"], input[placeholder*="Email"]').first
+        dashboard_indicator = (
+            self.page.get_by_text("My Apps")
+            .or_(self.page.locator("button:has-text('Create App')"))
+            .or_(self.page.locator("button:has-text('Close')"))
+        )
+
+        for _ in range(20):
+            try:
+                if dashboard_indicator.first.is_visible():
+                    print("[INFO] Authenticated dashboard detected in AppBuilder.", flush=True)
+                    break
+                if email_loc.is_visible():
+                    break
+            except Exception:
+                pass
+            self.page.wait_for_timeout(1000)
+
+        # Fallback login if unauthenticated
+        try:
+            if email_loc.is_visible():
+                print("[INFO] Unauthenticated session detected in AppBuilder. Performing automated login...", flush=True)
+                email_loc.fill(LoginTestData.EMAIL)
+                password_loc = self.page.locator('input[type="password"], input[placeholder*="Password"]').first
+                password_loc.fill(LoginTestData.PASSWORD)
+                sign_in_btn = self.page.get_by_role("button", name="Sign In", exact=True)
+                sign_in_btn.click()
+                print("[INFO] Clicked Sign In button in AppBuilder, waiting for dashboard...", flush=True)
+                self.page.wait_for_timeout(3000)
+                try:
+                    dashboard_indicator.first.wait_for(state="visible", timeout=20000)
+                    print("[INFO] Successfully reached authenticated dashboard in AppBuilder.", flush=True)
+                except Exception:
+                    pass
+
+                # Cache session cookies
+                try:
+                    import json
+                    from utils.config import STORAGE_STATE_PATH
+                    STORAGE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                    new_state = self.page.context.storage_state()
+                    if STORAGE_STATE_PATH.exists():
+                        try:
+                            with open(STORAGE_STATE_PATH, "r", encoding="utf-8") as f:
+                                existing_state = json.load(f)
+                            cookie_map = {
+                                (c.get("name"), c.get("domain"), c.get("path")): c
+                                for c in existing_state.get("cookies", [])
+                            }
+                            for c in new_state.get("cookies", []):
+                                cookie_map[(c.get("name"), c.get("domain"), c.get("path"))] = c
+                            origin_map = {o.get("origin"): o for o in existing_state.get("origins", [])}
+                            for o in new_state.get("origins", []):
+                                origin_map[o.get("origin")] = o
+                            merged_state = {
+                                "cookies": list(cookie_map.values()),
+                                "origins": list(origin_map.values()),
+                            }
+                            with open(STORAGE_STATE_PATH, "w", encoding="utf-8") as f:
+                                json.dump(merged_state, f, indent=2)
+                        except Exception:
+                            self.page.context.storage_state(path=str(STORAGE_STATE_PATH))
+                    else:
+                        self.page.context.storage_state(path=str(STORAGE_STATE_PATH))
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[WARNING] AppBuilder auto-login check encountered error: {e}", flush=True)
+
+        # Close announcement modal if present
+        try:
+            close_btn = self.page.locator("button:has-text('Close'), button[aria-label='Close'], .modal-close").first
+            if close_btn.is_visible(timeout=3000):
+                close_btn.click()
+                self.page.wait_for_timeout(500)
+        except Exception:
+            pass
 
     def initiate_create_app(self, app_name: str, app_slug: str) -> None:
         """Click 'Create App' button and enter app name and subdomain/slug."""
         self.app_name = app_name
         self.app_slug = app_slug
+
+        # Dismiss modal if still open
+        try:
+            close_btn = self.page.locator("button:has-text('Close'), button[aria-label='Close']").first
+            if close_btn.is_visible(timeout=1000):
+                close_btn.click()
+                self.page.wait_for_timeout(500)
+        except Exception:
+            pass
+
         create_btn = self.page.locator("button:has-text('Create App')").first
         create_btn.click()
-        self.page.wait_for_timeout(1500)
+        print("[INFO] Clicked 'Create App' button. Waiting for dashboard creation form...")
 
-        # First textbox is App Name
-        name_input = self.page.get_by_role("textbox").first
-        name_input.click()
-        name_input.fill(app_name)
+        # Wait for navigation to /dashboard/new-multipage or heading 'Create your dashboard'
+        try:
+            self.page.wait_for_url("**/new-multipage**", timeout=15000)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(2000)
 
-        # Second textbox is Subdomain / URL Slug
-        slug_input = self.page.get_by_role("textbox").nth(1)
-        slug_input.click()
-        slug_input.fill(app_slug)
+        # Populate App Name and Subdomain
+        self._ensure_app_details_filled()
 
     def connect_google_account_if_prompted(self) -> None:
         """Connect Google Account and handle OAuth consent steps:
@@ -335,28 +428,51 @@ class AppBuilderPage(BasePage):
         self.page.wait_for_timeout(1500)
 
     def _ensure_app_details_filled(self) -> None:
-        """Ensure App Name and Subdomain are filled, re-populating them if cleared by OAuth redirect."""
-        try:
-            name_input = self.page.get_by_role("textbox").first
-            slug_input = self.page.get_by_role("textbox").nth(1)
+        """Ensure App Name and Subdomain are filled, re-populating them if cleared by async re-render or OAuth redirect."""
+        target_name = getattr(self, "app_name", "Team Tracker App")
+        target_slug = getattr(self, "app_slug", "team-tracker-app")
 
-            if name_input.is_visible(timeout=2000):
+        try:
+            # Locate Name input: first textbox, or input with placeholder/name 'Name'
+            name_input = (
+                self.page.locator("input[placeholder*='Name'], input[name*='name']").first
+                if self.page.locator("input[placeholder*='Name'], input[name*='name']").count() > 0
+                else self.page.get_by_role("textbox").first
+            )
+            # Locate Subdomain input: second textbox, or input with placeholder/name 'slug'/'subdomain'
+            slug_input = (
+                self.page.locator("input[placeholder*='Sub'], input[name*='slug'], input[name*='subdomain']").first
+                if self.page.locator("input[placeholder*='Sub'], input[name*='slug'], input[name*='subdomain']").count() > 0
+                else self.page.get_by_role("textbox").nth(1)
+            )
+
+            if name_input and name_input.is_visible(timeout=3000):
                 current_name = name_input.input_value().strip()
-                target_name = getattr(self, "app_name", None)
-                if not current_name and target_name:
-                    print(f"[INFO] App Name was empty after OAuth redirect. Re-filling: '{target_name}'")
+                if not current_name or current_name != target_name:
+                    print(f"[INFO] Populating App Name input: '{target_name}'")
                     name_input.click()
+                    name_input.fill("")
                     name_input.fill(target_name)
+                    try:
+                        name_input.dispatch_event("input")
+                        name_input.dispatch_event("change")
+                    except Exception:
+                        pass
                     self.page.wait_for_timeout(500)
 
-            if slug_input.is_visible(timeout=2000):
+            if slug_input and slug_input.is_visible(timeout=3000):
                 current_slug = slug_input.input_value().strip()
-                target_slug = getattr(self, "app_slug", None)
-                if not current_slug and target_slug:
-                    print(f"[INFO] Subdomain was empty after OAuth redirect. Re-filling: '{target_slug}'")
+                if not current_slug or current_slug != target_slug:
+                    print(f"[INFO] Populating Subdomain input: '{target_slug}'")
                     slug_input.click()
+                    slug_input.fill("")
                     slug_input.fill(target_slug)
-                    self.page.wait_for_timeout(1500)
+                    try:
+                        slug_input.dispatch_event("input")
+                        slug_input.dispatch_event("change")
+                    except Exception:
+                        pass
+                    self.page.wait_for_timeout(1000)
         except Exception as e:
             print(f"[DEBUG] Error checking/re-filling app details: {e}")
 
@@ -367,17 +483,24 @@ class AppBuilderPage(BasePage):
         select_sheet_btn.click()
         self.page.wait_for_timeout(3000)
 
-        # Find the Google Picker iframe dynamically
+        # Find the Google Picker iframe dynamically (waiting up to 15s)
         picker_frame = None
-        for frame in self.page.frames:
-            if "picker" in frame.url or "google.com" in frame.url:
-                picker_frame = frame
+        for _ in range(15):
+            for frame in self.page.frames:
+                if "picker" in frame.url or "google.com" in frame.url:
+                    picker_frame = frame
+                    break
+            if picker_frame:
                 break
+            self.page.wait_for_timeout(1000)
 
         select_selector = "[role='button']:has-text('Select'), .picker-select-control-enabled, div:text-is('Select'), button:has-text('Select')"
 
         if picker_frame:
-            picker_frame.locator(f"[role='option']:has-text('{spreadsheet_name}')").first.click()
+            target_opt = picker_frame.locator(f"[role='option']:has-text('{spreadsheet_name}')").first
+            if not target_opt.is_visible(timeout=5000):
+                target_opt = picker_frame.locator(f"text='{spreadsheet_name}'").first
+            target_opt.click()
             self.page.wait_for_timeout(1000)
             select_btn = picker_frame.locator(select_selector).first
             if not select_btn.is_visible(timeout=2000):
@@ -385,7 +508,10 @@ class AppBuilderPage(BasePage):
             select_btn.click()
         else:
             picker_locator = self.page.frame_locator("iframe").first
-            picker_locator.locator(f"[role='option']:has-text('{spreadsheet_name}')").first.click()
+            target_opt = picker_locator.locator(f"[role='option']:has-text('{spreadsheet_name}')").first
+            if not target_opt.is_visible(timeout=5000):
+                target_opt = picker_locator.locator(f"text='{spreadsheet_name}'").first
+            target_opt.click()
             self.page.wait_for_timeout(1000)
             select_btn = picker_locator.locator(select_selector).first
             if not select_btn.is_visible(timeout=2000):
