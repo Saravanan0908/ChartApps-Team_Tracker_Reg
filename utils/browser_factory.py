@@ -91,6 +91,11 @@ def launch_persistent_browser(
     # Inject saved cookies and localStorage from storage_state.json if available
     storage_state_file = profile_dir / "storage_state.json"
     target_state = storage_state_file if storage_state_file.exists() else (STORAGE_STATE_PATH if STORAGE_STATE_PATH.exists() else None)
+    if not (target_state and target_state.exists()):
+        repo_fallback = Path(__file__).resolve().parent.parent / "testdata" / "auth_session.json"
+        if repo_fallback.exists():
+            target_state = repo_fallback
+            print(f"[INFO] Using repository session fallback: {repo_fallback}")
     if target_state:
         try:
             with open(target_state, "r", encoding="utf-8") as f:

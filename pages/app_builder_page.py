@@ -1,4 +1,4 @@
-﻿"""App Builder Page Object for New App creation, page editing, blocks, publishing, and cleanup."""
+"""App Builder Page Object for New App creation, page editing, blocks, publishing, and cleanup."""
 
 import re
 import time

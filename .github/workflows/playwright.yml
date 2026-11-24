@@ -133,12 +133,21 @@ jobs:
             } catch {
               Write-Host "WARNING: Restored file could not be parsed as JSON: $_"
             }
+          } elseif (Test-Path "testdata/auth_session.json") {
+            Copy-Item "testdata/auth_session.json" -Destination $targetFile -Force
+            Write-Host "SUCCESS: Authentication session restored from repository fallback (testdata/auth_session.json)."
+            try {
+              $json = Get-Content $targetFile -Raw | ConvertFrom-Json
+              $cookieCount = ($json.cookies | Measure-Object).Count
+              $googleCount = ($json.cookies | Where-Object { $_.domain -like "*google*" } | Measure-Object).Count
+              Write-Host "Validated fallback session: $cookieCount cookies ($googleCount Google cookies) active."
+            } catch {
+              Write-Host "WARNING: Fallback session could not be parsed: $_"
+            }
           } else {
             Write-Host "=================================================================="
-            Write-Host "WARNING: 'AUTH_STORAGE_STATE' secret is NOT set in GitHub Secrets!"
-            Write-Host "Without this secret, Google OAuth in Scenario 2 will trigger a"
-            Write-Host "2-Step Verification challenge from cloud datacenter IPs."
-            Write-Host "Run 'utils\copy_auth_for_github.bat' locally and add the secret."
+            Write-Host "WARNING: No authentication session found (secret or fallback file)!"
+            Write-Host "Google OAuth in Scenario 2 will be challenged with 2FA on cloud runners."
             Write-Host "=================================================================="
           }
 
