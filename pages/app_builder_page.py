@@ -104,6 +104,20 @@ class AppBuilderPage(BasePage):
                     break
 
                 if "accounts.google.com" in current_url:
+                    # Check for Google "Couldn't sign you in" / "This browser or app may not be secure"
+                    try:
+                        insecure_msg = oauth_page.locator("text='This browser or app may not be secure', text='Couldn’t sign you in', text='Could not sign you in'").first
+                        if insecure_msg.is_visible(timeout=1000):
+                            print("[WARNING] Google detected automation on OAuth consent ('This browser or app may not be secure').")
+                            try_again = oauth_page.locator("a:has-text('Try again'), button:has-text('Try again')").first
+                            if try_again.is_visible(timeout=1000):
+                                print("[INFO] Clicking 'Try again' on Google OAuth screen...")
+                                try_again.click()
+                                oauth_page.wait_for_timeout(2500)
+                                continue
+                    except Exception:
+                        pass
+
                     # 1. Email input: Fill email first if on sign-in screen
                     email_input = oauth_page.locator("input[type='email'], input#identifierId, input[name='identifier']").first
                     is_email_screen = False

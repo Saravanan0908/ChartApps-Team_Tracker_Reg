@@ -9,7 +9,7 @@ import utils.suppress_debug
 from pathlib import Path
 from typing import Optional, Tuple
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright
-from utils.config import CHANNEL, HEADLESS, SLOW_MO_MS, USER_DATA_DIR, STORAGE_STATE_PATH
+from utils.config import CHANNEL, HEADLESS, REAL_USER_AGENT, SLOW_MO_MS, USER_DATA_DIR, STORAGE_STATE_PATH
 
 
 def launch_persistent_browser(
@@ -29,10 +29,13 @@ def launch_persistent_browser(
     launch_kwargs = {
         "user_data_dir": str(profile_dir),
         "headless": headless,
+        "user_agent": REAL_USER_AGENT,
         "args": [
             "--disable-blink-features=AutomationControlled",
             "--no-default-browser-check",
             "--disable-features=IsolateOrigins,site-per-process",
+            "--disable-infobars",
+            "--lang=en-US,en",
         ],
         "ignore_default_args": ["--enable-automation"],
     }
@@ -57,23 +60,35 @@ def launch_persistent_browser(
     # it uses the SQLite database in user_data_dir.
     context = playwright.chromium.launch_persistent_context(**launch_kwargs)
 
-    # Anti-bot detection script to prevent Google OAuth blockage ("This browser or app may not be secure")
+    # Anti-bot stealth initialization: properly delete navigator.webdriver and populate chrome runtime
     context.add_init_script("""
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        });
-        window.chrome = {
-            runtime: {}
-        };
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [1, 2, 3, 4, 5]
-        });
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['en-US', 'en']
-        });
+        try {
+            const newProto = Object.getPrototypeOf(navigator);
+            delete newProto.webdriver;
+        } catch (e) {}
+        try {
+            delete navigator.webdriver;
+        } catch (e) {}
+        try {
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+                configurable: true
+            });
+        } catch (e) {}
+
+        if (!window.chrome) {
+            window.chrome = {};
+        }
+        if (!window.chrome.runtime) {
+            window.chrome.runtime = {
+                PlatformOs: { WIN: 'win', MAC: 'mac', ANDROID: 'android', LINUX: 'linux' },
+                PlatformArch: { X86_64: 'x86-64', ARM64: 'arm64' },
+                OnInstalledReason: { CHROME_UPDATE: 'chrome_update' }
+            };
+        }
     """)
 
-    # Inject saved cookies from storage_state.json if available
+    # Inject saved cookies and localStorage from storage_state.json if available
     storage_state_file = profile_dir / "storage_state.json"
     target_state = storage_state_file if storage_state_file.exists() else (STORAGE_STATE_PATH if STORAGE_STATE_PATH.exists() else None)
     if target_state:
@@ -83,8 +98,25 @@ def launch_persistent_browser(
                 cookies = state_data.get("cookies", [])
                 if cookies:
                     context.add_cookies(cookies)
+
+                # Inject localStorage entries
+                for origin_data in state_data.get("origins", []):
+                    origin = origin_data.get("origin")
+                    items = origin_data.get("localStorage", [])
+                    if origin and items:
+                        set_items = "; ".join([
+                            f"window.localStorage.setItem({json.dumps(it['name'])}, {json.dumps(it['value'])});"
+                            for it in items
+                        ])
+                        context.add_init_script(f"""
+                            try {{
+                                if (window.location.origin === {json.dumps(origin)}) {{
+                                    {set_items}
+                                }}
+                            }} catch (e) {{}}
+                        """)
         except Exception as e:
-            print(f"[WARNING] Could not load cookies from {target_state}: {e}")
+            print(f"[WARNING] Could not load cookies/localStorage from {target_state}: {e}")
 
     page = context.pages[0] if context.pages else context.new_page()
 
@@ -112,17 +144,26 @@ def create_browser_and_page(
     """Launch standard browser instance (clean session)."""
     launch_kwargs = {
         "headless": headless,
-        "args": ["--disable-blink-features=AutomationControlled"],
+        "args": [
+            "--disable-blink-features=AutomationControlled",
+            "--no-default-browser-check",
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--disable-infobars",
+            "--lang=en-US,en",
+        ],
         "ignore_default_args": ["--enable-automation"],
+    }
+    context_kwargs = {
+        "user_agent": REAL_USER_AGENT,
     }
     if not headless:
         launch_kwargs["args"].extend([
             "--start-maximized",
             "--window-position=0,0",
         ])
-        context_kwargs = {"no_viewport": True}
+        context_kwargs["no_viewport"] = True
     else:
-        context_kwargs = {"viewport": {"width": 1920, "height": 1080}}
+        context_kwargs["viewport"] = {"width": 1920, "height": 1080}
 
     if channel:
         launch_kwargs["channel"] = channel
@@ -130,18 +171,30 @@ def create_browser_and_page(
     browser: Browser = playwright.chromium.launch(**launch_kwargs)
     context: BrowserContext = browser.new_context(**context_kwargs)
     context.add_init_script("""
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        });
-        window.chrome = {
-            runtime: {}
-        };
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [1, 2, 3, 4, 5]
-        });
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['en-US', 'en']
-        });
+        try {
+            const newProto = Object.getPrototypeOf(navigator);
+            delete newProto.webdriver;
+        } catch (e) {}
+        try {
+            delete navigator.webdriver;
+        } catch (e) {}
+        try {
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+                configurable: true
+            });
+        } catch (e) {}
+
+        if (!window.chrome) {
+            window.chrome = {};
+        }
+        if (!window.chrome.runtime) {
+            window.chrome.runtime = {
+                PlatformOs: { WIN: 'win', MAC: 'mac', ANDROID: 'android', LINUX: 'linux' },
+                PlatformArch: { X86_64: 'x86-64', ARM64: 'arm64' },
+                OnInstalledReason: { CHROME_UPDATE: 'chrome_update' }
+            };
+        }
     """)
     page: Page = context.new_page()
 

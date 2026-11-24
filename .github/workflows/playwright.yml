@@ -81,10 +81,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 5. Install Chromium
-      - name: Install Playwright Chromium
+      # 5. Install Playwright Browsers (Chromium & Chrome)
+      - name: Install Playwright Browsers
         run: |
           python -m playwright install chromium
+          python -m playwright install chrome
 
       # 6. Create report directories
       - name: Create Report Directories
