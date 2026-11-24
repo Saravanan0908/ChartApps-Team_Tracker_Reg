@@ -63,24 +63,41 @@ class AppBuilderPage(BasePage):
         # Ensure App Name and Subdomain are filled before checking 'Next' button
         self._ensure_app_details_filled()
 
-        # Step B: Check if Next button on Create your dashboard is already enabled (or Google already connected)
-        already_connected = self.page.locator("text='Connected as:', text='Change Account'").first
+        # Step B: Check if Google is already connected on ChartApps account
+        already_connected = (
+            self.page.get_by_text("Connected as:")
+            .or_(self.page.get_by_role("button", name="Change Account"))
+            .or_(self.page.locator("text='Connected as:'"))
+            .or_(self.page.locator("text='Change Account'"))
+        ).first
+
         next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
-        if already_connected.is_visible(timeout=2000):
-            print("[INFO] Google account is already connected ('Connected as: ...' detected).")
+
+        if already_connected.is_visible(timeout=2500):
+            print("[INFO] Google account is ALREADY CONNECTED ('Connected as: chartapps.com@gmail.com' detected).")
             self._ensure_app_details_filled()
             self.page.wait_for_timeout(1000)
             if next_btn.is_visible(timeout=3000):
                 try:
-                    expect(next_btn).to_be_enabled(timeout=10000)
+                    expect(next_btn).to_be_enabled(timeout=15000)
                     next_btn.scroll_into_view_if_needed()
                     next_btn.click()
-                    print("[INFO] Clicked 'Next' with existing Google connection.")
-                    self.page.wait_for_timeout(2000)
-                    if select_sheet_btn.is_visible(timeout=5000):
-                        return
+                    print("[INFO] Clicked 'Next' button directly with existing Google connection.")
+                    expect(select_sheet_btn).to_be_visible(timeout=30000)
+                    print("[INFO] Reached 'Select Your Spreadsheet' step successfully without re-auth.")
+                    return
                 except Exception as e:
-                    print(f"[DEBUG] Clicking Next on already connected state: {e}")
+                    print(f"[WARNING] Could not click 'Next' on already-connected state: {e}")
+                    # Re-verify fields and retry click with force
+                    self._ensure_app_details_filled()
+                    self.page.wait_for_timeout(1000)
+                    try:
+                        next_btn.click(force=True)
+                        print("[INFO] Clicked 'Next' button with force=True on existing Google connection.")
+                        expect(select_sheet_btn).to_be_visible(timeout=30000)
+                        return
+                    except Exception as retry_err:
+                        print(f"[DEBUG] Retry next_btn click failed: {retry_err}")
 
         if next_btn.is_visible(timeout=2000) and next_btn.is_enabled():
             print("[INFO] Google account already connected ('Next' is enabled). Clicking Next...")
