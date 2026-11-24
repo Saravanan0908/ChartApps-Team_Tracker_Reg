@@ -3,16 +3,8 @@
 import os
 import json
 
-# Suppress Playwright Inspector and Debugger to ensure uninterrupted execution
-os.environ.pop("PWDEBUG", None)
-os.environ.pop("PLAYWRIGHT_INSPECT", None)
-os.environ.pop("npm_config_pwdebug", None)
-
-try:
-    import playwright._impl.utils.debug as _pw_debug
-    _pw_debug._debug_mode = ""
-except Exception:
-    pass
+# Suppress Playwright Inspector, recorder, and debug mode completely
+import utils.suppress_debug
 
 from pathlib import Path
 from typing import Optional, Tuple

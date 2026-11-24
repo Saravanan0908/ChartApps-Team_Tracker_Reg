@@ -8,18 +8,6 @@ Scenario 2 (tag: new_app):      New App - Creation, Google OAuth & Consent, Spre
 
 import os
 import sys
-
-# Suppress Playwright Inspector and Debugger to ensure uninterrupted execution
-os.environ.pop("PWDEBUG", None)
-os.environ.pop("PLAYWRIGHT_INSPECT", None)
-os.environ.pop("npm_config_pwdebug", None)
-
-try:
-    import playwright._impl.utils.debug as _pw_debug
-    _pw_debug._debug_mode = ""
-except Exception:
-    pass
-
 import time
 import webbrowser
 from pathlib import Path
@@ -29,6 +17,9 @@ from playwright.sync_api import Page, Playwright, sync_playwright
 
 # Ensure project root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Suppress Playwright Inspector, recorder, and debug mode completely
+import utils.suppress_debug
 
 from pages.team_tracker_page import TeamTrackerPage
 from pages.app_builder_page import AppBuilderPage
@@ -253,14 +244,7 @@ def run_standalone(target_scenario: str = "all") -> None:
     target_scenario = (os.environ.get("SCENARIO") or target_scenario).lower()
 
     # Clear any debug/inspector flags to ensure uninterrupted execution
-    os.environ.pop("PWDEBUG", None)
-    os.environ.pop("PLAYWRIGHT_INSPECT", None)
-    os.environ.pop("npm_config_pwdebug", None)
-    try:
-        import playwright._impl.utils.debug as _pw_debug
-        _pw_debug._debug_mode = ""
-    except Exception:
-        pass
+    utils.suppress_debug.suppress_playwright_inspector()
 
     print("=" * 75)
     print(f"Executing ChartApps Regression Suite (Scenario: {target_scenario.upper()} | Headless: {HEADLESS})")

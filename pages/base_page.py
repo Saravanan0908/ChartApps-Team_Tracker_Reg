@@ -5,6 +5,7 @@ It encapsulates common browser interactions (navigation, waiting, title checks, 
 so that individual page classes can focus exclusively on their specific page elements and workflows.
 """
 
+import utils.suppress_debug
 from pathlib import Path
 from typing import Optional
 from playwright.sync_api import Page, Response

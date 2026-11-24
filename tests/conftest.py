@@ -4,16 +4,8 @@ with automatic failure screenshot capture and Allure test reporting.
 
 import os
 
-# Suppress Playwright Inspector and Debugger to ensure uninterrupted execution
-os.environ.pop("PWDEBUG", None)
-os.environ.pop("PLAYWRIGHT_INSPECT", None)
-os.environ.pop("npm_config_pwdebug", None)
-
-try:
-    import playwright._impl.utils.debug as _pw_debug
-    _pw_debug._debug_mode = ""
-except Exception:
-    pass
+# Suppress Playwright Inspector, recorder, and debug mode completely
+import utils.suppress_debug
 
 import time
 import webbrowser
