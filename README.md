@@ -158,6 +158,24 @@ python -m playwright install chrome
 
 ---
 
+### 7. Configure GitHub Secrets for Cloud Auto-Run (One-Time Setup)
+
+To allow GitHub Actions to run Google OAuth without being blocked by Google's 2-Step Verification:
+
+1. Run the copy script locally:
+   ```powershell
+   .\copy_auth_for_github.bat
+   ```
+   *(This automatically copies your authenticated Google session to your clipboard as Base64 and opens the GitHub Secrets page in your browser).*
+2. On GitHub, click **New repository secret**.
+3. Set **Name** to: `AUTH_STORAGE_STATE`
+4. **Value**: Paste (`Ctrl+V`) your clipboard.
+5. Click **Add secret**.
+
+Now GitHub Actions scheduled runs will execute automatically every day without any 2FA blockage!
+
+---
+
 ## ⚙️ CI/CD & Automated Scheduling (GitHub Actions)
 
 The workflow file is located at [`.github/workflows/playwright.yml`](.github/workflows/playwright.yml).

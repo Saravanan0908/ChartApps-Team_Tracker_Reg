@@ -158,12 +158,38 @@ class TeamTrackerPage(BasePage):
                 except Exception:
                     pass
 
-                # Cache session cookies to file for future test runs
+                # Cache session cookies to file for future test runs (merging with existing cookies to preserve Google OAuth)
                 try:
+                    import json
                     from utils.config import STORAGE_STATE_PATH
                     STORAGE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-                    self.page.context.storage_state(path=str(STORAGE_STATE_PATH))
-                    print(f"[INFO] Saved authenticated session to: {STORAGE_STATE_PATH}", flush=True)
+                    new_state = self.page.context.storage_state()
+                    if STORAGE_STATE_PATH.exists():
+                        try:
+                            with open(STORAGE_STATE_PATH, "r", encoding="utf-8") as f:
+                                existing_state = json.load(f)
+                            cookie_map = {
+                                (c.get("name"), c.get("domain"), c.get("path")): c
+                                for c in existing_state.get("cookies", [])
+                            }
+                            for c in new_state.get("cookies", []):
+                                cookie_map[(c.get("name"), c.get("domain"), c.get("path"))] = c
+                            origin_map = {o.get("origin"): o for o in existing_state.get("origins", [])}
+                            for o in new_state.get("origins", []):
+                                origin_map[o.get("origin")] = o
+                            merged_state = {
+                                "cookies": list(cookie_map.values()),
+                                "origins": list(origin_map.values()),
+                            }
+                            with open(STORAGE_STATE_PATH, "w", encoding="utf-8") as f:
+                                json.dump(merged_state, f, indent=2)
+                            print(f"[INFO] Saved merged authenticated session ({len(cookie_map)} cookies) to: {STORAGE_STATE_PATH}", flush=True)
+                        except Exception:
+                            self.page.context.storage_state(path=str(STORAGE_STATE_PATH))
+                            print(f"[INFO] Saved authenticated session to: {STORAGE_STATE_PATH}", flush=True)
+                    else:
+                        self.page.context.storage_state(path=str(STORAGE_STATE_PATH))
+                        print(f"[INFO] Saved authenticated session to: {STORAGE_STATE_PATH}", flush=True)
                 except Exception:
                     pass
         except Exception as e:

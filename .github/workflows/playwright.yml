@@ -101,12 +101,45 @@ jobs:
           AUTH_STORAGE_STATE: ${{ secrets.AUTH_STORAGE_STATE }}
         run: |
           New-Item -ItemType Directory -Force -Path ".auth_profile" | Out-Null
+          $targetFile = ".auth_profile/storage_state.json"
 
           if ($env:AUTH_STORAGE_STATE -and $env:AUTH_STORAGE_STATE.Trim() -ne "") {
-            Set-Content -Path ".auth_profile/storage_state.json" -Value $env:AUTH_STORAGE_STATE -Encoding utf8
-            Write-Host "SUCCESS: Authentication session restored."
+            $raw = $env:AUTH_STORAGE_STATE.Trim()
+            $content = $null
+
+            # Detect Base64 vs Raw JSON
+            if ($raw.StartsWith("{")) {
+              $content = $raw
+              Write-Host "Detected raw JSON session."
+            } else {
+              try {
+                $bytes = [System.Convert]::FromBase64String($raw)
+                $content = [System.Text.Encoding]::UTF8.GetString($bytes)
+                Write-Host "Detected Base64-encoded session. Successfully decoded."
+              } catch {
+                $content = $raw
+                Write-Host "Could not decode Base64, treating as raw string."
+              }
+            }
+
+            Set-Content -Path $targetFile -Value $content -Encoding utf8
+
+            # Validate restored JSON
+            try {
+              $json = Get-Content $targetFile -Raw | ConvertFrom-Json
+              $cookieCount = ($json.cookies | Measure-Object).Count
+              $googleCount = ($json.cookies | Where-Object { $_.domain -like "*google*" } | Measure-Object).Count
+              Write-Host "SUCCESS: Authentication session restored! Total cookies: $cookieCount ($googleCount Google cookies)."
+            } catch {
+              Write-Host "WARNING: Restored file could not be parsed as JSON: $_"
+            }
           } else {
-            Write-Host "NOTICE: No saved session. Fallback login will be used."
+            Write-Host "=================================================================="
+            Write-Host "WARNING: 'AUTH_STORAGE_STATE' secret is NOT set in GitHub Secrets!"
+            Write-Host "Without this secret, Google OAuth in Scenario 2 will trigger a"
+            Write-Host "2-Step Verification challenge from cloud datacenter IPs."
+            Write-Host "Run 'utils\copy_auth_for_github.bat' locally and add the secret."
+            Write-Host "=================================================================="
           }
 
       # 8. Execute regression tests

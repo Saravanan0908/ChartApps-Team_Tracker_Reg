@@ -104,6 +104,31 @@ class AppBuilderPage(BasePage):
                     break
 
                 if "accounts.google.com" in current_url:
+                    # Check for Google 2-Step Verification / "Verify it's you" security checkpoint
+                    try:
+                        verify_challenge = oauth_page.locator(
+                            "h1:has-text('Verify it’s you'), "
+                            "h1:has-text('Verify it\\'s you'), "
+                            "h2:has-text('Choose how you want to sign in'), "
+                            "text='Choose how you want to sign in'"
+                        ).first
+                        if verify_challenge.is_visible(timeout=1000):
+                            msg = (
+                                "\n" + "=" * 70 + "\n"
+                                "[ERROR] Google 2-Step Verification ('Verify it’s you') triggered!\n"
+                                "Google blocked automated interactive login from this cloud runner IP.\n"
+                                "To run on GitHub Actions without 2FA blockage:\n"
+                                "1. Run 'utils\\copy_auth_for_github.bat' on your local computer.\n"
+                                "2. Paste the copied session into GitHub Repo Secrets as 'AUTH_STORAGE_STATE'.\n"
+                                + "=" * 70 + "\n"
+                            )
+                            print(msg, flush=True)
+                            raise RuntimeError(msg)
+                    except RuntimeError:
+                        raise
+                    except Exception:
+                        pass
+
                     # Check for Google "Couldn't sign you in" / "This browser or app may not be secure"
                     try:
                         insecure_msg = oauth_page.locator("text='This browser or app may not be secure', text='Couldn’t sign you in', text='Could not sign you in'").first
