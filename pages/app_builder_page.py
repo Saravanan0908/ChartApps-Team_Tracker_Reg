@@ -60,10 +60,31 @@ class AppBuilderPage(BasePage):
             print("[INFO] 'Select Your Spreadsheet' is already visible. Proceeding...")
             return
 
-        # Step B: Check if Next button on Create your dashboard is already enabled
+        # Ensure App Name and Subdomain are filled before checking 'Next' button
+        self._ensure_app_details_filled()
+
+        # Step B: Check if Next button on Create your dashboard is already enabled (or Google already connected)
+        already_connected = self.page.locator("text='Connected as:', text='Change Account'").first
         next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
+        if already_connected.is_visible(timeout=2000):
+            print("[INFO] Google account is already connected ('Connected as: ...' detected).")
+            self._ensure_app_details_filled()
+            self.page.wait_for_timeout(1000)
+            if next_btn.is_visible(timeout=3000):
+                try:
+                    expect(next_btn).to_be_enabled(timeout=10000)
+                    next_btn.scroll_into_view_if_needed()
+                    next_btn.click()
+                    print("[INFO] Clicked 'Next' with existing Google connection.")
+                    self.page.wait_for_timeout(2000)
+                    if select_sheet_btn.is_visible(timeout=5000):
+                        return
+                except Exception as e:
+                    print(f"[DEBUG] Clicking Next on already connected state: {e}")
+
         if next_btn.is_visible(timeout=2000) and next_btn.is_enabled():
             print("[INFO] Google account already connected ('Next' is enabled). Clicking Next...")
+            next_btn.scroll_into_view_if_needed()
             next_btn.click()
             self.page.wait_for_timeout(2000)
             if select_sheet_btn.is_visible(timeout=5000):
@@ -267,21 +288,60 @@ class AppBuilderPage(BasePage):
 
         self.page.wait_for_timeout(2000)
         if "chartapps.app" in self.page.url and "accounts.google.com" not in self.page.url:
+            # Re-fill App Name and Subdomain if cleared by OAuth redirect
+            self._ensure_app_details_filled()
+
             next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
             if next_btn.is_visible(timeout=5000):
                 try:
-                    # Wait for Next button to become enabled after Google connection
+                    # Wait for Next button to become enabled after Name, Subdomain & Google are all verified
                     expect(next_btn).to_be_enabled(timeout=20000)
+                    next_btn.scroll_into_view_if_needed()
                     next_btn.click()
                     print("[INFO] Clicked 'Next' button on Create dashboard.")
                     self.page.wait_for_timeout(2000)
                 except Exception as next_err:
-                    print(f"[WARNING] Could not click 'Next' button: {next_err}")
+                    print(f"[WARNING] Could not click 'Next' button directly: {next_err}")
+                    # Re-verify fields and retry click with force
+                    self._ensure_app_details_filled()
+                    self.page.wait_for_timeout(1000)
+                    try:
+                        next_btn.click(force=True)
+                        print("[INFO] Clicked 'Next' button with force=True.")
+                        self.page.wait_for_timeout(2000)
+                    except Exception:
+                        pass
 
         # Step E: Wait until 'Select Your Spreadsheet' or 'Create Dashboard' is visible
         select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
         expect(select_sheet_btn).to_be_visible(timeout=30000)
         self.page.wait_for_timeout(1500)
+
+    def _ensure_app_details_filled(self) -> None:
+        """Ensure App Name and Subdomain are filled, re-populating them if cleared by OAuth redirect."""
+        try:
+            name_input = self.page.get_by_role("textbox").first
+            slug_input = self.page.get_by_role("textbox").nth(1)
+
+            if name_input.is_visible(timeout=2000):
+                current_name = name_input.input_value().strip()
+                target_name = getattr(self, "app_name", None)
+                if not current_name and target_name:
+                    print(f"[INFO] App Name was empty after OAuth redirect. Re-filling: '{target_name}'")
+                    name_input.click()
+                    name_input.fill(target_name)
+                    self.page.wait_for_timeout(500)
+
+            if slug_input.is_visible(timeout=2000):
+                current_slug = slug_input.input_value().strip()
+                target_slug = getattr(self, "app_slug", None)
+                if not current_slug and target_slug:
+                    print(f"[INFO] Subdomain was empty after OAuth redirect. Re-filling: '{target_slug}'")
+                    slug_input.click()
+                    slug_input.fill(target_slug)
+                    self.page.wait_for_timeout(1500)
+        except Exception as e:
+            print(f"[DEBUG] Error checking/re-filling app details: {e}")
 
     def select_google_spreadsheet(self, spreadsheet_name: str = "Regression Testing Automation") -> None:
         """Open Google Picker and select spreadsheet."""
