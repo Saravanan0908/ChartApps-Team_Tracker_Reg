@@ -10,6 +10,7 @@ This Page Object models all user interactions on the ChartApps Team Tracker page
 7. Table sorting and verification of stored spreadsheet records
 """
 
+import time
 from datetime import datetime
 from typing import Optional
 from playwright.sync_api import Locator, Page, expect

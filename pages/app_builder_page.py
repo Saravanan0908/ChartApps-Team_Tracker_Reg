@@ -155,9 +155,16 @@ class AppBuilderPage(BasePage):
                         print(f"[DEBUG] Password check exception: {e}")
 
                     # 3. Account Chooser: Select existing account if presented
+                    #    Handles both "data-identifier" account tiles AND the
+                    #    "You're signing back in" link format seen in aria snapshots.
                     try:
                         account_link = oauth_page.get_by_role("link", name=re.compile(r"chartapps.*@gmail", re.I)).or_(
-                            oauth_page.locator("text=chartapps.com@gmail.com, [data-email*='chartapps.com'], [data-identifier*='chartapps.com'], div[data-identifier]")
+                            oauth_page.locator(
+                                "[data-email*='chartapps.com'], "
+                                "[data-identifier*='chartapps.com'], "
+                                "div[data-identifier], "
+                                "li[data-identifier]"
+                            )
                         ).first
                         if account_link.is_visible(timeout=1000):
                             print("[INFO] Clicking Google account chooser link...")
@@ -180,22 +187,32 @@ class AppBuilderPage(BasePage):
                         pass
 
                     # 5. Consent Screen "Continue" button
+                    #    Covers both normal consent AND "You're signing back in to ChartApps"
                     try:
-                        cont_btn = oauth_page.locator("button:has-text('Continue'), [role='button']:has-text('Continue'), div[role='button']:has-text('Continue')").first
-                        if cont_btn.is_visible(timeout=1000):
-                            print("[INFO] Clicking 'Continue' on Google consent screen...")
+                        cont_btn = oauth_page.locator(
+                            "button:has-text('Continue'), "
+                            "[role='button']:has-text('Continue'), "
+                            "div[role='button']:has-text('Continue'), "
+                            "button:has-text('Allow'), "
+                            "[role='button']:has-text('Allow')"
+                        ).first
+                        if cont_btn.is_visible(timeout=2000):
+                            print(f"[INFO] Clicking consent/signing-back-in button on Google OAuth screen...")
                             cont_btn.click()
-                            oauth_page.wait_for_timeout(2000)
+                            oauth_page.wait_for_timeout(2500)
                             continue
                     except Exception:
                         pass
 
-                    # 6. Consent Screen "Next" / "Allow" button (ONLY if NOT on email/password input screens)
+                    # 6. Consent Screen "Next" button (ONLY if NOT on email/password input screens)
                     try:
                         if not is_email_screen and not is_pwd_screen:
-                            next_consent_btn = oauth_page.locator("button:has-text('Next'), [role='button']:has-text('Next'), button:has-text('Allow'), [role='button']:has-text('Allow')").first
+                            next_consent_btn = oauth_page.locator(
+                                "button:has-text('Next'), "
+                                "[role='button']:has-text('Next')"
+                            ).first
                             if next_consent_btn.is_visible(timeout=1000):
-                                print("[INFO] Clicking 'Next'/'Allow' on Google consent screen...")
+                                print("[INFO] Clicking 'Next' on Google consent screen...")
                                 next_consent_btn.click()
                                 oauth_page.wait_for_timeout(2000)
                                 continue
