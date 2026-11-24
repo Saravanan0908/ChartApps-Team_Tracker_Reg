@@ -139,80 +139,96 @@ class AppBuilderPage(BasePage):
         self._ensure_app_details_filled()
 
     def connect_google_account_if_prompted(self) -> None:
-        """Connect Google Account and handle OAuth consent steps:
-        1. Check if 'Select Your Spreadsheet' is already visible
-        2. If 'Next' button on dashboard creation is already enabled, click it
-        3. Otherwise, click 'Connect Your Google Account' (handling popup or tab)
-        4. Select account, check consent checkboxes, click Continue/Next
-        5. Back on main page, click 'Next' to transition to spreadsheet step
-        6. Wait for 'Select Your Spreadsheet' to be visible
+        """Connect Google Account and advance to Spreadsheet selection.
+        
+        Handles:
+        1. If already on 'Select Your Spreadsheet' step, return immediately.
+        2. Detects existing Google connection ('Connected as: ...' or 'Change Account').
+        3. Ensures App Name and Subdomain inputs are filled and validated.
+        4. Waits for 'Next' button to become enabled and clicks it.
+        5. Confirms arrival at 'Select Your Spreadsheet' step without triggering unnecessary Google OAuth.
+        6. If Google is truly not connected, handles OAuth consent safely.
         """
-        # Step A: Check if already on Spreadsheet selection step
-        select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
-        if select_sheet_btn.is_visible(timeout=2000):
-            print("[INFO] 'Select Your Spreadsheet' is already visible. Proceeding...")
-            return
-
-        # Ensure App Name and Subdomain are filled before checking 'Next' button
-        self._ensure_app_details_filled()
-
-        # Step B: Check if Google is already connected on ChartApps account
-        already_connected = (
-            self.page.get_by_text("Connected as:")
-            .or_(self.page.get_by_role("button", name="Change Account"))
-            .or_(self.page.locator("text='Connected as:'"))
-            .or_(self.page.locator("text='Change Account'"))
+        select_sheet_btn = self.page.locator(
+            "button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')"
         ).first
 
+        # Step A: Check if already on Spreadsheet selection step
+        if select_sheet_btn.is_visible(timeout=2000):
+            print("[INFO] 'Select Your Spreadsheet' is already visible. Proceeding...", flush=True)
+            return
+
+        # Ensure App Name and Subdomain are filled before checking Next button
+        self._ensure_app_details_filled()
+
         next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
+        already_connected = self.page.locator(
+            "text='Connected as:', text='Change Account', p:has-text('Connected as')"
+        ).first
 
-        if already_connected.is_visible(timeout=2500):
-            print("[INFO] Google account is ALREADY CONNECTED ('Connected as: chartapps.com@gmail.com' detected).")
-            self._ensure_app_details_filled()
-            self.page.wait_for_timeout(1000)
-            if next_btn.is_visible(timeout=3000):
-                try:
-                    expect(next_btn).to_be_enabled(timeout=15000)
-                    next_btn.scroll_into_view_if_needed()
-                    next_btn.click()
-                    print("[INFO] Clicked 'Next' button directly with existing Google connection.")
-                    expect(select_sheet_btn).to_be_visible(timeout=30000)
-                    print("[INFO] Reached 'Select Your Spreadsheet' step successfully without re-auth.")
-                    return
-                except Exception as e:
-                    print(f"[WARNING] Could not click 'Next' on already-connected state: {e}")
-                    # Re-verify fields and retry click with force
-                    self._ensure_app_details_filled()
-                    self.page.wait_for_timeout(1000)
-                    try:
-                        next_btn.click(force=True)
-                        print("[INFO] Clicked 'Next' button with force=True on existing Google connection.")
-                        expect(select_sheet_btn).to_be_visible(timeout=30000)
-                        return
-                    except Exception as retry_err:
-                        print(f"[DEBUG] Retry next_btn click failed: {retry_err}")
+        # Poll for up to 30s to allow async Google connection and subdomain validation to complete
+        start_time = time.time()
+        max_wait = 30.0
+        connected_logged = False
 
-        if next_btn.is_visible(timeout=2000) and next_btn.is_enabled():
-            print("[INFO] Google account already connected ('Next' is enabled). Clicking Next...")
-            next_btn.scroll_into_view_if_needed()
-            next_btn.click()
-            self.page.wait_for_timeout(2000)
-            if select_sheet_btn.is_visible(timeout=5000):
+        while (time.time() - start_time) < max_wait:
+            if select_sheet_btn.is_visible(timeout=500):
+                print("[INFO] 'Select Your Spreadsheet' step reached successfully.", flush=True)
                 return
 
-        # Step C: Click 'Connect Your Google Account' if visible
-        connect_btn = self.page.get_by_role("button", name="Connect Your Google Account")
-        if not connect_btn.is_visible(timeout=3000):
-            connect_btn = self.page.locator("button:has-text('Connect Your Google Account')").first
+            is_connected = already_connected.is_visible(timeout=500)
+            if is_connected and not connected_logged:
+                print("[INFO] Google account is ALREADY CONNECTED in ChartApps ('Connected as:' / 'Change Account' detected).", flush=True)
+                connected_logged = True
 
+            # Keep details filled and blur triggered for subdomain check
+            self._ensure_app_details_filled()
+
+            # If Next button is enabled, click it to advance to spreadsheet step
+            if next_btn.is_visible(timeout=500) and next_btn.is_enabled():
+                print("[INFO] 'Next' button is enabled! Clicking Next to proceed to Spreadsheet selection...", flush=True)
+                next_btn.scroll_into_view_if_needed()
+                next_btn.click()
+                self.page.wait_for_timeout(2000)
+                try:
+                    expect(select_sheet_btn).to_be_visible(timeout=15000)
+                    print("[INFO] Successfully reached 'Select Your Spreadsheet' step without OAuth popup.", flush=True)
+                    return
+                except Exception as click_err:
+                    print(f"[DEBUG] Waiting for spreadsheet step after Next click: {click_err}", flush=True)
+                    # Check if Next is still visible & enabled (retry click)
+                    if next_btn.is_visible() and next_btn.is_enabled():
+                        next_btn.click()
+                        self.page.wait_for_timeout(2000)
+                        if select_sheet_btn.is_visible(timeout=5000):
+                            return
+
+            self.page.wait_for_timeout(1000)
+
+        # If already connected but Next was still disabled, do an aggressive fill and force click check
+        if already_connected.is_visible(timeout=1000):
+            print("[INFO] Google connection confirmed. Doing final fill and click on Next...", flush=True)
+            self._ensure_app_details_filled()
+            self.page.wait_for_timeout(1500)
+            if next_btn.is_visible(timeout=2000):
+                try:
+                    expect(next_btn).to_be_enabled(timeout=10000)
+                    next_btn.click()
+                    expect(select_sheet_btn).to_be_visible(timeout=20000)
+                    return
+                except Exception as e:
+                    print(f"[WARNING] Final Next click with existing connection encountered: {e}", flush=True)
+
+        # Step C: Only if Google is truly not connected, check for 'Connect Your Google Account'
+        connect_btn = self.page.locator("button:has-text('Connect Your Google Account')").first
         if connect_btn.is_visible(timeout=3000):
-            print("[INFO] Clicking 'Connect Your Google Account'...")
+            print("[INFO] Google account not connected yet. Clicking 'Connect Your Google Account'...", flush=True)
             oauth_page = None
             try:
-                with self.page.expect_popup(timeout=3000) as popup_info:
+                with self.page.expect_popup(timeout=4000) as popup_info:
                     connect_btn.click()
                 oauth_page = popup_info.value
-                print(f"[INFO] Google OAuth opened in popup window: {oauth_page.url}")
+                print(f"[INFO] Google OAuth opened in popup window: {oauth_page.url}", flush=True)
             except Exception:
                 self.page.wait_for_timeout(2000)
                 for p in self.page.context.pages:
@@ -223,15 +239,15 @@ class AppBuilderPage(BasePage):
                     oauth_page = self.page
 
             # Handle Google OAuth on the target oauth_page
-            start_time = time.time()
-            while (time.time() - start_time) < 60:
+            start_oauth = time.time()
+            while (time.time() - start_oauth) < 45:
                 if oauth_page.is_closed():
-                    print("[INFO] Google OAuth popup closed.")
+                    print("[INFO] Google OAuth popup closed.", flush=True)
                     break
 
                 current_url = oauth_page.url
                 if "chartapps.app" in current_url and "accounts.google.com" not in current_url:
-                    print("[INFO] Redirected back to ChartApps from Google OAuth.")
+                    print("[INFO] Redirected back to ChartApps from Google OAuth.", flush=True)
                     break
 
                 if "accounts.google.com" in current_url:
@@ -240,17 +256,21 @@ class AppBuilderPage(BasePage):
                         verify_challenge = oauth_page.locator(
                             "h1:has-text('Verify it’s you'), "
                             "h1:has-text('Verify it\\'s you'), "
+                            "[role='heading']:has-text('Verify it’s you'), "
+                            "[role='heading']:has-text('Verify it\\'s you'), "
                             "h2:has-text('Choose how you want to sign in'), "
-                            "text='Choose how you want to sign in'"
+                            "[role='heading']:has-text('Choose how you want to sign in'), "
+                            "text='Choose how you want to sign in', "
+                            "text='Verify it’s you', "
+                            "text='Verify it\\'s you'"
                         ).first
                         if verify_challenge.is_visible(timeout=1000):
                             msg = (
                                 "\n" + "=" * 70 + "\n"
                                 "[ERROR] Google 2-Step Verification ('Verify it’s you') triggered!\n"
-                                "Google blocked automated interactive login from this cloud runner IP.\n"
-                                "To run on GitHub Actions without 2FA blockage:\n"
-                                "1. Run 'utils\\copy_auth_for_github.bat' on your local computer.\n"
-                                "2. Paste the copied session into GitHub Repo Secrets as 'AUTH_STORAGE_STATE'.\n"
+                                "Google blocked automated login from cloud runner IP.\n"
+                                "To fix permanently in GitHub Actions:\n"
+                                "Ensure ChartApps user session is restored via AUTH_STORAGE_STATE secret.\n"
                                 + "=" * 70 + "\n"
                             )
                             print(msg, flush=True)
@@ -260,61 +280,7 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # Check for Google "Couldn't sign you in" / "This browser or app may not be secure"
-                    try:
-                        insecure_msg = oauth_page.locator("text='This browser or app may not be secure', text='Couldn’t sign you in', text='Could not sign you in'").first
-                        if insecure_msg.is_visible(timeout=1000):
-                            print("[WARNING] Google detected automation on OAuth consent ('This browser or app may not be secure').")
-                            try_again = oauth_page.locator("a:has-text('Try again'), button:has-text('Try again')").first
-                            if try_again.is_visible(timeout=1000):
-                                print("[INFO] Clicking 'Try again' on Google OAuth screen...")
-                                try_again.click()
-                                oauth_page.wait_for_timeout(2500)
-                                continue
-                    except Exception:
-                        pass
-
-                    # 1. Email input: Fill email first if on sign-in screen
-                    email_input = oauth_page.locator("input[type='email'], input#identifierId, input[name='identifier']").first
-                    is_email_screen = False
-                    try:
-                        if email_input.is_visible(timeout=1000):
-                            is_email_screen = True
-                            print("[INFO] Google Sign-in screen detected: entering email...")
-                            email_input.fill("")
-                            email_input.press_sequentially(LoginTestData.EMAIL, delay=60)
-                            oauth_page.wait_for_timeout(500)
-                            id_next = oauth_page.locator("#identifierNext, button:has-text('Next')").first
-                            id_next.click()
-                            print("[INFO] Submitted email, waiting for password screen...")
-                            oauth_page.wait_for_timeout(2500)
-                            continue
-                    except Exception as e:
-                        print(f"[DEBUG] Email check exception: {e}")
-
-                    # 2. Password input: Fill password if on password screen
-                    pwd_input = oauth_page.locator("input[type='password'], input[name='Passwd'], input[autocomplete='current-password']").first
-                    is_pwd_screen = False
-                    try:
-                        if pwd_input.is_visible(timeout=1000):
-                            is_pwd_screen = True
-                            print("[INFO] Google Password screen detected: entering password...")
-                            pwd_input.fill("")
-                            pwd_input.press_sequentially(LoginTestData.PASSWORD, delay=60)
-                            oauth_page.wait_for_timeout(500)
-                            pwd_next = oauth_page.locator("#passwordNext, button:has-text('Next')").first
-                            pwd_next.click()
-                            print("[INFO] Submitted password, waiting for consent screen...")
-                            oauth_page.wait_for_timeout(2500)
-                            continue
-                    except Exception as e:
-                        print(f"[DEBUG] Password check exception: {e}")
-
-                    # D. Continue / Allow FIRST — before account tile check.
-                    #    Covers ALL consent screens:
-                    #    - "You're signing back in to ChartApps"            -> Continue
-                    #    - "ChartApps wants access to your Google Account"  -> Continue / Allow
-                    #    Also handles "Scroll down" button that may block the click.
+                    # Continue / Allow button on consent screen
                     try:
                         cont_btn = oauth_page.locator(
                             "button:has-text('Continue'), "
@@ -323,26 +289,22 @@ class AppBuilderPage(BasePage):
                             "[role='button']:has-text('Allow')"
                         ).first
                         if cont_btn.is_visible(timeout=1500):
-                            # Scroll page first if needed
                             try:
                                 scroll_btn = oauth_page.locator("button:has-text('Scroll down')").first
                                 if scroll_btn.is_visible(timeout=500):
-                                    print("[INFO] Scrolling consent page before clicking Continue...")
                                     scroll_btn.click()
-                                    oauth_page.wait_for_timeout(800)
+                                    oauth_page.wait_for_timeout(500)
                             except Exception:
                                 pass
                             btn_text = cont_btn.inner_text().strip()
-                            print(f"[INFO] Clicking '{btn_text}' on Google OAuth consent screen...")
+                            print(f"[INFO] Clicking '{btn_text}' on Google OAuth consent screen...", flush=True)
                             cont_btn.click()
-                            oauth_page.wait_for_timeout(2500)
+                            oauth_page.wait_for_timeout(2000)
                             continue
                     except Exception:
                         pass
 
-                    # E. Account chooser TILES — only reached when no Continue/Allow visible and NOT on a challenge page.
-                    #    Tightly-scoped to account chooser list items only.
-                    #    Guarded against challenge/error pages where email text is displayed as label.
+                    # Account chooser tile (for saved account)
                     if "/challenge" not in oauth_page.url:
                         try:
                             account_tile = oauth_page.locator(
@@ -350,16 +312,14 @@ class AppBuilderPage(BasePage):
                                 "div[data-identifier*='chartapps']"
                             ).first
                             if account_tile.is_visible(timeout=1000):
-                                label = (account_tile.get_attribute("data-identifier")
-                                         or account_tile.get_attribute("data-email") or "chartapps account")
-                                print(f"[INFO] Clicking account chooser tile: {label}...")
+                                print("[INFO] Clicking account chooser tile...", flush=True)
                                 account_tile.click()
                                 oauth_page.wait_for_timeout(2000)
                                 continue
                         except Exception:
                             pass
 
-                    # F. Consent Screen Checkboxes
+                    # Consent checkboxes
                     try:
                         checkboxes = oauth_page.locator("input[type='checkbox']:not(:checked)")
                         if checkboxes.count() > 0:
@@ -371,23 +331,20 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # G. Next button (non-email/password screens only)
+                    # Next button on consent
                     try:
-                        if not is_email_screen and not is_pwd_screen:
-                            next_consent_btn = oauth_page.locator(
-                                "button:has-text('Next'), "
-                                "[role='button']:has-text('Next')"
-                            ).first
-                            if next_consent_btn.is_visible(timeout=1000):
-                                print("[INFO] Clicking 'Next' on Google consent screen...")
-                                next_consent_btn.click()
-                                oauth_page.wait_for_timeout(2000)
-                                continue
+                        next_consent_btn = oauth_page.locator(
+                            "button:has-text('Next'), [role='button']:has-text('Next')"
+                        ).first
+                        if next_consent_btn.is_visible(timeout=1000):
+                            print("[INFO] Clicking 'Next' on Google consent screen...", flush=True)
+                            next_consent_btn.click()
+                            oauth_page.wait_for_timeout(2000)
+                            continue
                     except Exception:
                         pass
 
                 oauth_page.wait_for_timeout(1000)
-
 
         # Step D: Ensure browser has navigated back to ChartApps dashboard (NOT Google)
         print("[INFO] Waiting for navigation back to ChartApps dashboard...", flush=True)
@@ -396,34 +353,21 @@ class AppBuilderPage(BasePage):
                 break
             self.page.wait_for_timeout(1000)
 
-        self.page.wait_for_timeout(2000)
+        self.page.wait_for_timeout(1500)
         if "chartapps.app" in self.page.url and "accounts.google.com" not in self.page.url:
-            # Re-fill App Name and Subdomain if cleared by OAuth redirect
             self._ensure_app_details_filled()
-
             next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
             if next_btn.is_visible(timeout=5000):
                 try:
-                    # Wait for Next button to become enabled after Name, Subdomain & Google are all verified
                     expect(next_btn).to_be_enabled(timeout=20000)
                     next_btn.scroll_into_view_if_needed()
                     next_btn.click()
-                    print("[INFO] Clicked 'Next' button on Create dashboard.")
+                    print("[INFO] Clicked 'Next' button on Create dashboard.", flush=True)
                     self.page.wait_for_timeout(2000)
                 except Exception as next_err:
-                    print(f"[WARNING] Could not click 'Next' button directly: {next_err}")
-                    # Re-verify fields and retry click with force
-                    self._ensure_app_details_filled()
-                    self.page.wait_for_timeout(1000)
-                    try:
-                        next_btn.click(force=True)
-                        print("[INFO] Clicked 'Next' button with force=True.")
-                        self.page.wait_for_timeout(2000)
-                    except Exception:
-                        pass
+                    print(f"[WARNING] Could not click 'Next' button: {next_err}", flush=True)
 
         # Step E: Wait until 'Select Your Spreadsheet' or 'Create Dashboard' is visible
-        select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
         expect(select_sheet_btn).to_be_visible(timeout=30000)
         self.page.wait_for_timeout(1500)
 
@@ -433,23 +377,29 @@ class AppBuilderPage(BasePage):
         target_slug = getattr(self, "app_slug", "team-tracker-app")
 
         try:
-            # Locate Name input: first textbox, or input with placeholder/name 'Name'
-            name_input = (
-                self.page.locator("input[placeholder*='Name'], input[name*='name']").first
-                if self.page.locator("input[placeholder*='Name'], input[name*='name']").count() > 0
-                else self.page.get_by_role("textbox").first
-            )
-            # Locate Subdomain input: second textbox, or input with placeholder/name 'slug'/'subdomain'
-            slug_input = (
-                self.page.locator("input[placeholder*='Sub'], input[name*='slug'], input[name*='subdomain']").first
-                if self.page.locator("input[placeholder*='Sub'], input[name*='slug'], input[name*='subdomain']").count() > 0
-                else self.page.get_by_role("textbox").nth(1)
-            )
+            main_loc = self.page.locator("main")
+            textboxes = main_loc.get_by_role("textbox")
+            if textboxes.count() >= 2:
+                name_input = textboxes.nth(0)
+                slug_input = textboxes.nth(1)
+            else:
+                name_input = (
+                    main_loc.locator("input[placeholder*='Name'], input[name*='name'], [role='textbox']").first
+                    if main_loc.locator("input[placeholder*='Name'], input[name*='name'], [role='textbox']").count() > 0
+                    else self.page.get_by_role("textbox").first
+                )
+                slug_input = (
+                    main_loc.locator("input[placeholder*='Sub'], input[name*='slug'], input[name*='subdomain'], [role='textbox']").nth(
+                        1 if main_loc.locator("input[placeholder*='Sub'], input[name*='slug'], input[name*='subdomain']").count() == 0 else 0
+                    )
+                    if main_loc.count() > 0
+                    else self.page.get_by_role("textbox").nth(1)
+                )
 
             if name_input and name_input.is_visible(timeout=3000):
                 current_name = name_input.input_value().strip()
                 if not current_name or current_name != target_name:
-                    print(f"[INFO] Populating App Name input: '{target_name}'")
+                    print(f"[INFO] Populating App Name input: '{target_name}'", flush=True)
                     name_input.click()
                     name_input.fill("")
                     name_input.fill(target_name)
@@ -458,23 +408,25 @@ class AppBuilderPage(BasePage):
                         name_input.dispatch_event("change")
                     except Exception:
                         pass
-                    self.page.wait_for_timeout(500)
+                    self.page.wait_for_timeout(300)
 
             if slug_input and slug_input.is_visible(timeout=3000):
                 current_slug = slug_input.input_value().strip()
                 if not current_slug or current_slug != target_slug:
-                    print(f"[INFO] Populating Subdomain input: '{target_slug}'")
+                    print(f"[INFO] Populating Subdomain input: '{target_slug}'", flush=True)
                     slug_input.click()
                     slug_input.fill("")
                     slug_input.fill(target_slug)
                     try:
                         slug_input.dispatch_event("input")
                         slug_input.dispatch_event("change")
+                        slug_input.press("Tab")
+                        slug_input.dispatch_event("blur")
                     except Exception:
                         pass
-                    self.page.wait_for_timeout(1000)
+                    self.page.wait_for_timeout(800)
         except Exception as e:
-            print(f"[DEBUG] Error checking/re-filling app details: {e}")
+            print(f"[DEBUG] Error checking/re-filling app details: {e}", flush=True)
 
     def select_google_spreadsheet(self, spreadsheet_name: str = "Regression Testing Automation") -> None:
         """Open Google Picker and select spreadsheet."""
