@@ -97,21 +97,63 @@ ChartApps/
 ```powershell
 pip install -r requirements.txt
 playwright install
+python -m playwright install chrome
 ```
 
-### 2. Execute the Regression Suite (Default Headless)
+---
+
+### 2. Run Commands — Existing App (Scenario 1)
+
+| Method | Command |
+|--------|---------|
+| Python script | `python tests\test_regression_existing_new_app.py existing` |
+| Pytest (Allure) | `pytest -m existing_app -s -v` |
+| Batch file | `.\run.bat existing` |
+| Debug + Inspector | `.\run_debug_inspect.bat existing` |
+
+---
+
+### 3. Run Commands — New App (Scenario 2)
+
+| Method | Command |
+|--------|---------|
+| Python script | `python tests\test_regression_existing_new_app.py new` |
+| Pytest (Allure) | `pytest -m new_app -s -v` |
+| Batch file | `.\run.bat new` |
+| Debug + Inspector | `.\run_debug_inspect.bat new` |
+
+---
+
+### 4. Run Commands — Full Suite (Both Scenarios)
+
+| Method | Command |
+|--------|---------|
+| Python script | `python tests\test_regression_existing_new_app.py all` |
+| Pytest (Allure) | `pytest -m regression -s -v` |
+| Batch file | `.\run.bat all` or `.\run_pytest.bat regression` |
+| Debug + Inspector | `.\run_debug_inspect.bat` |
+
+---
+
+### 5. Codegen / Recorder Mode (Record New Locators)
+
 ```powershell
-pytest -m regression -s -v
+# Opens Playwright Recorder with pre-loaded ChartApps session
+.\debug_codegen.bat
+
+# Record on a specific URL
+.\debug_codegen.bat https://chartapps.app/dashboard/new-multipage
 ```
 
-### 3. Run in Visible (Headed) Browser Mode
-```powershell
-$env:HEADED="true"; pytest -m regression -s -v
-```
+> **PowerShell tip:** Always prefix `.bat` files with `.\` in PowerShell.
+> In `cmd.exe` the `.\` prefix is optional.
 
-### 4. Run Directly as a Standalone Script
+---
+
+### 6. View Allure Report
+
 ```powershell
-python tests/test_team_tracker_regression.py
+.\open_allure_report.bat
 ```
 
 ---
