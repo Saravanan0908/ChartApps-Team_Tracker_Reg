@@ -320,32 +320,46 @@ class TeamTrackerPage(BasePage):
 
     def ensure_table_sorted_descending(self) -> None:
         """Ensure the table has newest records (today's date) at the top."""
-        date_th = self.date_cell_header.first
-        if not date_th.is_visible(timeout=3000):
-            return
-
-        today_prefix = datetime.now().strftime("%Y")
-
-        for attempt in range(3):
-            first_cell_text = ""
-            try:
-                first_cell = self.page.locator("table tbody tr:first-child td:first-child, .p-datatable-tbody tr:first-child td:first-child").first
-                if first_cell.is_visible(timeout=1000):
-                    first_cell_text = first_cell.inner_text().strip()
-            except Exception:
-                pass
-
-            if first_cell_text.startswith(today_prefix):
-                print(f"[INFO] Table is sorted descending (top row date: '{first_cell_text}').")
+        try:
+            date_th = self.date_cell_header.first
+            if not date_th.is_visible(timeout=3000):
                 return
 
-            print(f"[INFO] Top row date is '{first_cell_text}'. Clicking Date header to sort descending (attempt {attempt+1})...")
-            date_th.click()
-            self.page.wait_for_timeout(1000)
+            today_prefix = datetime.now().strftime("%Y")
+
+            for attempt in range(3):
+                first_cell_text = ""
+                try:
+                    first_cell = self.page.locator("table tbody tr:first-child td:first-child, .p-datatable-tbody tr:first-child td:first-child").first
+                    if first_cell.is_visible(timeout=1000):
+                        first_cell_text = first_cell.inner_text().strip()
+                except Exception:
+                    pass
+
+                if first_cell_text.startswith(today_prefix):
+                    print(f"[INFO] Table is sorted descending (top row date: '{first_cell_text}').")
+                    return
+
+                print(f"[INFO] Top row date is '{first_cell_text}'. Clicking Date header to sort descending (attempt {attempt+1})...")
+                try:
+                    # Click with force=True to bypass sticky header overlays (e.g. Session Report container)
+                    date_th.click(force=True, timeout=3000)
+                except Exception:
+                    try:
+                        # Fallback: direct DOM click via evaluate bypasses all pointer interception
+                        date_th.evaluate("el => el.click()")
+                    except Exception as click_err:
+                        print(f"[WARNING] Could not click Date header: {click_err}")
+                self.page.wait_for_timeout(1000)
+        except Exception as e:
+            print(f"[WARNING] ensure_table_sorted_descending encountered error: {e}")
 
     def sort_table_by_date(self) -> None:
         """Sort the spreadsheet table by Date descending to bring the newly added entry to the top."""
-        self.ensure_table_sorted_descending()
+        try:
+            self.ensure_table_sorted_descending()
+        except Exception as e:
+            print(f"[WARNING] sort_table_by_date encountered error: {e}")
 
     def verify_data_stored_in_table(self, task_description: str, activity_text: str, timeout_ms: int = 20000) -> None:
         """Verify that the submitted task and activity strings appear in the spreadsheet table.

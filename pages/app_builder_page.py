@@ -93,7 +93,7 @@ class AppBuilderPage(BasePage):
 
             # Handle Google OAuth on the target oauth_page
             start_time = time.time()
-            while (time.time() - start_time) < 45:
+            while (time.time() - start_time) < 60:
                 if oauth_page.is_closed():
                     print("[INFO] Google OAuth popup closed.")
                     break
@@ -104,12 +104,48 @@ class AppBuilderPage(BasePage):
                     break
 
                 if "accounts.google.com" in current_url:
-                    # 1. Google Account Chooser: Click existing account (e.g. "chartapps chartapps.com@gmail")
+                    # 1. Email input: Fill email first if on sign-in screen
+                    email_input = oauth_page.locator("input[type='email'], input#identifierId, input[name='identifier']").first
+                    is_email_screen = False
+                    try:
+                        if email_input.is_visible(timeout=1000):
+                            is_email_screen = True
+                            print("[INFO] Google Sign-in screen detected: entering email...")
+                            email_input.fill("")
+                            email_input.press_sequentially(LoginTestData.EMAIL, delay=60)
+                            oauth_page.wait_for_timeout(500)
+                            id_next = oauth_page.locator("#identifierNext, button:has-text('Next')").first
+                            id_next.click()
+                            print("[INFO] Submitted email, waiting for password screen...")
+                            oauth_page.wait_for_timeout(2500)
+                            continue
+                    except Exception as e:
+                        print(f"[DEBUG] Email check exception: {e}")
+
+                    # 2. Password input: Fill password if on password screen
+                    pwd_input = oauth_page.locator("input[type='password'], input[name='Passwd'], input[autocomplete='current-password']").first
+                    is_pwd_screen = False
+                    try:
+                        if pwd_input.is_visible(timeout=1000):
+                            is_pwd_screen = True
+                            print("[INFO] Google Password screen detected: entering password...")
+                            pwd_input.fill("")
+                            pwd_input.press_sequentially(LoginTestData.PASSWORD, delay=60)
+                            oauth_page.wait_for_timeout(500)
+                            pwd_next = oauth_page.locator("#passwordNext, button:has-text('Next')").first
+                            pwd_next.click()
+                            print("[INFO] Submitted password, waiting for consent screen...")
+                            oauth_page.wait_for_timeout(2500)
+                            continue
+                    except Exception as e:
+                        print(f"[DEBUG] Password check exception: {e}")
+
+                    # 3. Account Chooser: Select existing account if presented
                     try:
                         account_link = oauth_page.get_by_role("link", name=re.compile(r"chartapps.*@gmail", re.I)).or_(
                             oauth_page.locator("text=chartapps.com@gmail.com, [data-email*='chartapps.com'], [data-identifier*='chartapps.com'], div[data-identifier]")
                         ).first
-                        if account_link.is_visible(timeout=1500):
+                        if account_link.is_visible(timeout=1000):
                             print("[INFO] Clicking Google account chooser link...")
                             account_link.click()
                             oauth_page.wait_for_timeout(2000)
@@ -117,7 +153,7 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # 2. Consent Screen Checkboxes
+                    # 4. Consent Screen Checkboxes
                     try:
                         checkboxes = oauth_page.locator("input[type='checkbox']:not(:checked)")
                         if checkboxes.count() > 0:
@@ -129,10 +165,10 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # 3. Consent Screen "Continue" button
+                    # 5. Consent Screen "Continue" button
                     try:
                         cont_btn = oauth_page.locator("button:has-text('Continue'), [role='button']:has-text('Continue'), div[role='button']:has-text('Continue')").first
-                        if cont_btn.is_visible(timeout=1500):
+                        if cont_btn.is_visible(timeout=1000):
                             print("[INFO] Clicking 'Continue' on Google consent screen...")
                             cont_btn.click()
                             oauth_page.wait_for_timeout(2000)
@@ -140,61 +176,39 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # 4. Consent Screen "Next" / "Allow" button
+                    # 6. Consent Screen "Next" / "Allow" button (ONLY if NOT on email/password input screens)
                     try:
-                        next_consent_btn = oauth_page.locator("button:has-text('Next'), [role='button']:has-text('Next'), button:has-text('Allow'), [role='button']:has-text('Allow')").first
-                        if next_consent_btn.is_visible(timeout=1500):
-                            print("[INFO] Clicking 'Next'/'Allow' on Google consent screen...")
-                            next_consent_btn.click()
-                            oauth_page.wait_for_timeout(2000)
-                            continue
-                    except Exception:
-                        pass
-
-                    # 5. Type email with simulated human keystrokes ONLY if account chooser was absent
-                    try:
-                        email_input = oauth_page.locator("input[type='email'], input#identifierId, input[name='identifier']").first
-                        if email_input.is_visible(timeout=1000):
-                            email_input.click()
-                            email_input.press_sequentially(LoginTestData.EMAIL, delay=80)
-                            oauth_page.wait_for_timeout(500)
-                            id_next = oauth_page.locator("#identifierNext, button:has-text('Next')").first
-                            if id_next.is_visible(timeout=1000):
-                                id_next.click()
-                                oauth_page.wait_for_timeout(2500)
-                                continue
-                    except Exception:
-                        pass
-
-                    # 6. Type password with simulated human keystrokes
-                    try:
-                        pwd_input = oauth_page.locator("input[type='password'], input[name='Passwd'], input[autocomplete='current-password']").first
-                        if pwd_input.is_visible(timeout=1000):
-                            pwd_input.click()
-                            pwd_input.press_sequentially(LoginTestData.PASSWORD, delay=80)
-                            oauth_page.wait_for_timeout(500)
-                            pwd_next = oauth_page.locator("#passwordNext, button:has-text('Next')").first
-                            if pwd_next.is_visible(timeout=1000):
-                                pwd_next.click()
-                                oauth_page.wait_for_timeout(2500)
+                        if not is_email_screen and not is_pwd_screen:
+                            next_consent_btn = oauth_page.locator("button:has-text('Next'), [role='button']:has-text('Next'), button:has-text('Allow'), [role='button']:has-text('Allow')").first
+                            if next_consent_btn.is_visible(timeout=1000):
+                                print("[INFO] Clicking 'Next'/'Allow' on Google consent screen...")
+                                next_consent_btn.click()
+                                oauth_page.wait_for_timeout(2000)
                                 continue
                     except Exception:
                         pass
 
                 self.page.wait_for_timeout(1000)
 
-        # Step D: Back on main page, click 'Next' button if enabled
+        # Step D: Ensure browser has navigated back to ChartApps dashboard (NOT Google)
+        print("[INFO] Waiting for navigation back to ChartApps dashboard...", flush=True)
+        for _ in range(30):
+            if "chartapps.app" in self.page.url and "accounts.google.com" not in self.page.url:
+                break
+            self.page.wait_for_timeout(1000)
+
         self.page.wait_for_timeout(2000)
-        next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
-        if next_btn.is_visible(timeout=5000):
-            try:
-                # Wait for Next button to become enabled after Google connection
-                expect(next_btn).to_be_enabled(timeout=20000)
-                next_btn.click()
-                print("[INFO] Clicked 'Next' button on Create dashboard.")
-                self.page.wait_for_timeout(2000)
-            except Exception as next_err:
-                print(f"[WARNING] Could not click 'Next' button: {next_err}")
+        if "chartapps.app" in self.page.url and "accounts.google.com" not in self.page.url:
+            next_btn = self.page.locator("button:has-text('Next'), [role='button']:has-text('Next')").first
+            if next_btn.is_visible(timeout=5000):
+                try:
+                    # Wait for Next button to become enabled after Google connection
+                    expect(next_btn).to_be_enabled(timeout=20000)
+                    next_btn.click()
+                    print("[INFO] Clicked 'Next' button on Create dashboard.")
+                    self.page.wait_for_timeout(2000)
+                except Exception as next_err:
+                    print(f"[WARNING] Could not click 'Next' button: {next_err}")
 
         # Step E: Wait until 'Select Your Spreadsheet' or 'Create Dashboard' is visible
         select_sheet_btn = self.page.locator("button:has-text('Select Your Spreadsheet'), button:has-text('Create Dashboard')").first
