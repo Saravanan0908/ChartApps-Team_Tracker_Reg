@@ -1,4 +1,4 @@
-"""App Builder Page Object for New App creation, page editing, blocks, publishing, and cleanup."""
+﻿"""App Builder Page Object for New App creation, page editing, blocks, publishing, and cleanup."""
 
 import re
 import time
@@ -154,21 +154,23 @@ class AppBuilderPage(BasePage):
                     except Exception as e:
                         print(f"[DEBUG] Password check exception: {e}")
 
-                    # 3. Account Chooser: Select existing account if presented
-                    #    Handles both "data-identifier" account tiles AND the
-                    #    "You're signing back in" link format seen in aria snapshots.
+                    # 3. Account Chooser TILES only (data-identifier / data-email attributes).
+                    #    IMPORTANT: Do NOT use get_by_role("link") here — the
+                    #    "chartapps.com@gmail.com selected. Switch account" link on the
+                    #    consent screen is NOT a tile and clicking it loops forever.
+                    #    Real chooser tiles always carry data-identifier or data-authuser attrs.
                     try:
-                        account_link = oauth_page.get_by_role("link", name=re.compile(r"chartapps.*@gmail", re.I)).or_(
-                            oauth_page.locator(
-                                "[data-email*='chartapps.com'], "
-                                "[data-identifier*='chartapps.com'], "
-                                "div[data-identifier], "
-                                "li[data-identifier]"
-                            )
+                        account_tile = oauth_page.locator(
+                            "[data-identifier*='chartapps'], "
+                            "[data-email*='chartapps'], "
+                            "div[data-authuser], "
+                            "li[data-identifier]"
                         ).first
-                        if account_link.is_visible(timeout=1000):
-                            print("[INFO] Clicking Google account chooser link...")
-                            account_link.click()
+                        if account_tile.is_visible(timeout=1000):
+                            label = (account_tile.get_attribute("data-identifier")
+                                     or account_tile.get_attribute("data-email") or "chartapps account")
+                            print(f"[INFO] Clicking account chooser tile: {label}...")
+                            account_tile.click()
                             oauth_page.wait_for_timeout(2000)
                             continue
                     except Exception:
