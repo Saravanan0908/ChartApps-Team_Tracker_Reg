@@ -13,6 +13,8 @@ on:
       - main
 
   schedule:
+    # Daily at 11:00 AM IST (05:30 UTC)
+    - cron: '30 5 * * *'
 
     # Daily at 6:00 PM IST (12:30 UTC)
     - cron: '30 12 * * *'
@@ -20,14 +22,14 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: 'Select Scenario to Run (all = both in order, existing_app = Team Tracker only, new_app = New App only)'
+        description: 'Select Scenario to Run (existing_app = Team Tracker, new_app = New App, all = Both)'
         required: true
-        default: 'all'
+        default: 'existing_app'
         type: choice
         options:
-          - all
           - existing_app
           - new_app
+          - all
 
 permissions:
   contents: read
@@ -81,11 +83,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 5. Install Playwright Browsers (Chromium & Chrome)
-      - name: Install Playwright Browsers
+      # 5. Install Playwright Chromium
+      - name: Install Playwright Chromium
         run: |
           python -m playwright install chromium
-          python -m playwright install chrome
 
       # 6. Create report directories
       - name: Create Report Directories
@@ -157,16 +158,19 @@ jobs:
         env:
           CHARTAPPS_EMAIL: ${{ secrets.CHARTAPPS_EMAIL }}
           CHARTAPPS_PASSWORD: ${{ secrets.CHARTAPPS_PASSWORD }}
-          TARGET_SCENARIO: ${{ github.event.inputs.scenario || 'all' }}
+          TARGET_SCENARIO: ${{ github.event.inputs.scenario || 'existing_app' }}
           CI: "true"
           PYTHONUNBUFFERED: "1"
           PYTHONIOENCODING: "utf-8"
         run: |
           $marker = "regression"
-          if ($env:TARGET_SCENARIO -eq "existing_app") { $marker = "existing_app" }
+          if ($env:TARGET_SCENARIO -eq "existing_app") { $marker = "regression" }
           if ($env:TARGET_SCENARIO -eq "new_app") { $marker = "new_app" }
+          if ($env:TARGET_SCENARIO -eq "all") { $marker = "regression or new_app" }
           Write-Host "Executing Regression Suite with marker: $marker (Target: $env:TARGET_SCENARIO)"
           python -m pytest -m $marker -s -v `
+            --html=reports/azure_test_report.html `
+            --self-contained-html `
             --alluredir=reports/allure-results `
             --junitxml=reports/junit_report.xml
 
@@ -177,8 +181,9 @@ jobs:
         with:
           name: ChartApps-Test-Reports
           path: |
-            reports/allure-results/
+            reports/azure_test_report.html
             reports/junit_report.xml
+            reports/allure-results/
             reports/screenshots/
             reports/videos/
           if-no-files-found: warn

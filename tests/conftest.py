@@ -42,7 +42,15 @@ def persistent_context(playwright: Playwright) -> Generator[BrowserContext, None
         headless=HEADLESS,
     )
     yield context
-    context.close()
+    try:
+        for p in context.pages:
+            try:
+                p.close()
+            except Exception:
+                pass
+        context.close()
+    except Exception:
+        pass
 
 
 @pytest.fixture
@@ -86,6 +94,14 @@ def pytest_runtest_makereport(item, call):
                         name=f"Failure Screenshot - {item.name}",
                         attachment_type=allure.attachment_type.PNG,
                     )
+                except Exception:
+                    pass
+                try:
+                    from pytest_html import extras as html_extras
+                    extras = getattr(report, "extras", [])
+                    extras.append(html_extras.image(str(screenshot_path), name="Failure Screenshot"))
+                    extras.append(html_extras.html(f"<div style='color:#e53e3e;font-weight:bold;margin:5px 0;'>❌ Scenario Failed: {item.name}</div>"))
+                    report.extras = extras
                 except Exception:
                     pass
             except Exception:

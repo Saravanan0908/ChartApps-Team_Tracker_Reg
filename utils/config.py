@@ -8,13 +8,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 USER_DATA_DIR = BASE_DIR / ".auth_profile"
 STORAGE_STATE_PATH = USER_DATA_DIR / "storage_state.json"
 
-# Browser Configuration (Default to Headed locally for Codegen/debugging; Headless in CI)
-HEADLESS: bool = (os.environ.get("HEADLESS", "").lower() in ("true", "1")) or bool(os.environ.get("CI"))
+# Browser Configuration (Default to Headless mode; use HEADED=true for debugging)
+HEADLESS: bool = os.environ.get("HEADED", "").lower() not in ("true", "1")
 SLOW_MO_MS: int = 0
 
 def _get_browser_channel() -> str:
-    """Use official Google Chrome by default across both local and CI environments."""
-    if os.environ.get("USE_CHROMIUM"):
+    """Use official Google Chrome by default locally, Chromium in CI."""
+    if os.environ.get("CI") or os.environ.get("USE_CHROMIUM"):
         return ""
     chrome_paths = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",

@@ -50,12 +50,6 @@ def launch_persistent_browser(
     if channel:
         launch_kwargs["channel"] = channel
 
-    # Record video for failure capture & reporting
-    videos_dir = Path("reports/videos")
-    videos_dir.mkdir(parents=True, exist_ok=True)
-    launch_kwargs["record_video_dir"] = str(videos_dir)
-    launch_kwargs["record_video_size"] = {"width": 1280, "height": 720}
-
     # Note: launch_persistent_context does not take 'storage_state' as a parameter;
     # it uses the SQLite database in user_data_dir.
     context = playwright.chromium.launch_persistent_context(**launch_kwargs)
@@ -103,20 +97,6 @@ def launch_persistent_browser(
             print(f"[WARNING] Could not load cookies/localStorage from {target_state}: {e}")
 
     page = context.pages[0] if context.pages else context.new_page()
-
-    # Maximize the OS window via Chrome DevTools Protocol when running in headed mode
-    if not headless:
-        try:
-            cdp = context.new_cdp_session(page)
-            win = cdp.send("Browser.getWindowForTarget")
-            if win and "windowId" in win:
-                cdp.send("Browser.setWindowBounds", {
-                    "windowId": win["windowId"],
-                    "bounds": {"windowState": "maximized"},
-                })
-        except Exception:
-            pass
-
     return context, page
 
 
@@ -155,18 +135,4 @@ def create_browser_and_page(
     browser: Browser = playwright.chromium.launch(**launch_kwargs)
     context: BrowserContext = browser.new_context(**context_kwargs)
     page: Page = context.new_page()
-
-    # Maximize the OS window via Chrome DevTools Protocol when running in headed mode
-    if not headless:
-        try:
-            cdp = context.new_cdp_session(page)
-            win = cdp.send("Browser.getWindowForTarget")
-            if win and "windowId" in win:
-                cdp.send("Browser.setWindowBounds", {
-                    "windowId": win["windowId"],
-                    "bounds": {"windowState": "maximized"},
-                })
-        except Exception:
-            pass
-
     return browser, context, page
