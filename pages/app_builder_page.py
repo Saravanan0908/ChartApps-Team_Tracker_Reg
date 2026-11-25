@@ -984,7 +984,7 @@ class AppBuilderPage(BasePage):
 
         dialog_save = self.page.locator(AppBuilderLocators.DIALOG_SAVE_BUTTON).first
         dialog_save.click()
-        self.page.wait_for_timeout(1000)
+        self.page.wait_for_timeout(2500)
 
         # Get Public URL from input or current origin before closing dialog
         return_url = ""
@@ -1054,6 +1054,21 @@ class AppBuilderPage(BasePage):
             except Exception:
                 user_page.goto(public_url, wait_until="domcontentloaded", timeout=30000)
             user_page.wait_for_timeout(3000)
+
+            # Check for backend privacy propagation (Access Denied / Private app) and refresh if needed
+            for _ in range(5):
+                access_denied = user_page.locator("text='Access Denied', text='This application is private'").first
+                if access_denied.is_visible(timeout=1500):
+                    print("[INFO] Public app propagation in progress ('Access Denied'). Refreshing in 3s...", flush=True)
+                    user_page.wait_for_timeout(3000)
+                    refresh_link = user_page.locator("a:has-text('Refresh Page')").first
+                    if refresh_link.is_visible(timeout=1000):
+                        refresh_link.click()
+                    else:
+                        user_page.reload(wait_until="domcontentloaded")
+                    user_page.wait_for_timeout(2000)
+                else:
+                    break
 
             # 2. Wait explicitly for Date input to appear (ensures SPA has loaded and mounted)
             d_input = user_page.get_by_role("textbox", name="yyyy-mm-dd")
