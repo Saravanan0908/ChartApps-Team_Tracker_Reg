@@ -152,7 +152,7 @@ def find_screenshots() -> list[Path]:
 
 
 def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "", video_filename: str = "") -> str:
-    """Generate high-impact HTML email body with scenario matrix and checklist."""
+    """Generate high-impact HTML email body with scenario matrix, checklist, video & report links."""
     is_passed = results["is_passed"]
     status_text = "PASSED" if is_passed else "FAILED"
     header_color = "#10b981" if is_passed else "#ef4444"
@@ -162,6 +162,8 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "", vi
     badge_icon = "✔" if is_passed else "✖"
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    run_url = git_info.get("run_url", "https://github.com/Saravanan0908/ChartApps-Team_Tracker_Reg/actions")
+    artifacts_url = f"{run_url}#artifacts" if "/runs/" in run_url else run_url
 
     # 1. Executive Scenario Matrix
     scenario_cards = []
@@ -295,23 +297,42 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "", vi
     screenshot_html = ""
     if not is_passed and screenshot_cid:
         screenshot_html = f"""
-        <div style="margin-top: 24px; padding: 16px; background: #ffffff; border: 2px solid #f87171; border-radius: 8px;">
-          <h3 style="margin: 0 0 8px; font-size: 16px; color: #b91c1c;">📸 Failure Area Screenshot</h3>
-          <p style="margin: 0 0 12px; color: #6b7280; font-size: 13px;">Captured visual state of the application when the failure occurred:</p>
+        <div style="margin-top: 24px; padding: 18px; background: #ffffff; border: 2px solid #ef4444; border-radius: 8px; box-shadow: 0 2px 4px rgba(239,68,68,0.1);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h3 style="margin: 0; font-size: 16px; color: #b91c1c;">📸 Failure Area Screenshot</h3>
+            <a href="{artifacts_url}" target="_blank" style="font-size: 12px; font-weight: 700; color: #ef4444; text-decoration: none;">View in Artifacts &rarr;</a>
+          </div>
+          <p style="margin: 0 0 14px; color: #6b7280; font-size: 13px;">Captured visual state of the application at the exact point of test failure:</p>
           <div style="text-align: center;">
             <img src="cid:{screenshot_cid}" alt="Failure Area Screenshot" style="max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);" />
           </div>
-          <p style="margin: 8px 0 0; color: #9ca3af; font-size: 11px; text-align: center;">Image is also attached to this email for full-resolution review.</p>
+          <p style="margin: 10px 0 0; color: #6b7280; font-size: 12px; text-align: center;">Attached to this email as a high-resolution PNG image file.</p>
         </div>
         """
 
     # Video HTML (only on failure when video is attached)
     video_html = ""
-    if not is_passed and video_filename:
+    if not is_passed:
+        vid_title = f"🎥 Last 20s Failure Video ({video_filename})" if video_filename else "🎥 Test Execution Video Artifacts"
+        vid_desc = f"A 20-second video recording capturing the browser actions directly leading up to the failure (<code>{video_filename}</code>) has been attached to this email and archived in GitHub Actions artifacts." if video_filename else "Test execution video recording has been captured and archived in the GitHub Actions artifacts repository."
         video_html = f"""
-        <div style="margin-top: 20px; padding: 14px 16px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px;">
-          <div style="font-weight: 700; color: #be123c; font-size: 14px; margin-bottom: 4px;">🎥 Last 20s Failure Video Attached</div>
-          <div style="font-size: 12px; color: #4b5563;">A 20-second video recording capturing the visual state leading up to the failure (<code>{video_filename}</code>) has been attached to this email for playback.</div>
+        <div style="margin-top: 20px; padding: 16px 18px; background: #fff1f2; border: 1px solid #fecdd3; border-left: 4px solid #ef4444; border-radius: 8px;">
+          <div style="font-weight: 700; color: #be123c; font-size: 15px; margin-bottom: 6px;">{vid_title}</div>
+          <p style="margin: 0 0 12px; font-size: 13px; color: #4b5563;">{vid_desc}</p>
+          <div>
+            <a href="{artifacts_url}" target="_blank" style="display: inline-block; padding: 8px 16px; background: #dc2626; color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 12px; font-weight: 700;">
+              🎥 Download Failure Video & Run Artifacts
+            </a>
+          </div>
+        </div>
+        """
+    else:
+        video_html = f"""
+        <div style="margin-top: 20px; padding: 16px 18px; background: #ecfdf5; border: 1px solid #a7f3d0; border-left: 4px solid #10b981; border-radius: 8px;">
+          <div style="font-weight: 700; color: #065f46; font-size: 15px; margin-bottom: 4px;">🎉 All Regression Checks Succeeded</div>
+          <div style="font-size: 13px; color: #047857;">
+            All assertion checkpoints across Scenario 1 (Team Tracker) passed without errors. Video recording and failure screenshots were automatically cleaned up to keep email size minimal. Full report logs and Allure artifacts are accessible via the links below.
+          </div>
         </div>
         """
 
@@ -347,7 +368,7 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "", vi
             </div>
             <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center;">
               <div style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase;">Scenarios</div>
-              <div style="font-size: 16px; font-weight: 800; color: #1f2937; margin-top: 4px;">{len(results['suites']) or 2} Tests</div>
+              <div style="font-size: 16px; font-weight: 800; color: #1f2937; margin-top: 4px;">{len(results['suites']) or 1} Test(s)</div>
             </div>
             <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center;">
               <div style="font-size: 11px; font-weight: 700; color: #6b7280; text-transform: uppercase;">Trigger</div>
@@ -355,23 +376,41 @@ def build_email_html(results: dict, git_info: dict, screenshot_cid: str = "", vi
             </div>
           </div>
 
-          <!-- Run Metadata -->
-          <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #4b5563; background: #fdfdfd; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px;">
+          <!-- Quick Action Buttons: Allure & Artifacts -->
+          <div style="text-align: center; margin-bottom: 22px;">
+            <a href="{run_url}" target="_blank" style="display: inline-block; background: #2563eb; color: #ffffff; padding: 11px 20px; margin: 4px 6px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 13px; box-shadow: 0 2px 4px rgba(37,99,235,0.25);">
+              📊 View Full Test & Allure Report
+            </a>
+            <a href="{artifacts_url}" target="_blank" style="display: inline-block; background: #4b5563; color: #ffffff; padding: 11px 20px; margin: 4px 6px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.12);">
+              📦 Download Allure & Video Artifacts
+            </a>
+          </div>
+
+          <!-- Run Metadata & Schedule Information -->
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #4b5563; background: #fdfdfd; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; margin-bottom: 20px;">
             <tr>
-              <td style="padding: 6px 12px; font-weight: 600; width: 140px; color: #6b7280;">Repository:</td>
-              <td style="padding: 6px 12px;">{git_info['repo']}</td>
+              <td style="padding: 8px 12px; font-weight: 600; width: 160px; color: #6b7280;">Repository:</td>
+              <td style="padding: 8px 12px;">{git_info['repo']}</td>
             </tr>
             <tr style="background: #f9fafb;">
-              <td style="padding: 6px 12px; font-weight: 600; color: #6b7280;">Branch / Commit:</td>
-              <td style="padding: 6px 12px;"><code>{git_info['branch']}</code> ({git_info['commit_sha']})</td>
+              <td style="padding: 8px 12px; font-weight: 600; color: #6b7280;">Branch / Commit:</td>
+              <td style="padding: 8px 12px;"><code>{git_info['branch']}</code> ({git_info['commit_sha']})</td>
             </tr>
             <tr>
-              <td style="padding: 6px 12px; font-weight: 600; color: #6b7280;">Executed At:</td>
-              <td style="padding: 6px 12px;">{now_str} (IST: UTC+5:30)</td>
+              <td style="padding: 8px 12px; font-weight: 600; color: #6b7280;">Executed At:</td>
+              <td style="padding: 8px 12px;">{now_str} IST (Asia/Kolkata)</td>
             </tr>
             <tr style="background: #f9fafb;">
-              <td style="padding: 6px 12px; font-weight: 600; color: #6b7280;">GitHub Run:</td>
-              <td style="padding: 6px 12px;"><a href="{git_info['run_url']}" style="color: #2563eb; text-decoration: none; font-weight: 600;">View Run in GitHub Actions &rarr;</a></td>
+              <td style="padding: 8px 12px; font-weight: 600; color: #6b7280;">Daily Auto-Schedule:</td>
+              <td style="padding: 8px 12px;">⏰ <strong>11:00 AM IST & 6:00 PM IST</strong> (05:30 & 12:30 UTC)</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 12px; font-weight: 600; color: #6b7280;">Allure Report Link:</td>
+              <td style="padding: 8px 12px;"><a href="{run_url}" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 600;">Open GitHub Run & Allure Report &rarr;</a></td>
+            </tr>
+            <tr style="background: #f9fafb;">
+              <td style="padding: 8px 12px; font-weight: 600; color: #6b7280;">Video & Artifacts Link:</td>
+              <td style="padding: 8px 12px;"><a href="{artifacts_url}" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 600;">Download Videos, Screenshots & Allure Results &rarr;</a></td>
             </tr>
           </table>
 

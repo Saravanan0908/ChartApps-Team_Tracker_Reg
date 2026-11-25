@@ -25,11 +25,15 @@ def launch_persistent_browser(
     """
     profile_dir = Path(user_data_dir or USER_DATA_DIR)
     profile_dir.mkdir(parents=True, exist_ok=True)
+    videos_dir = Path("reports/videos").resolve()
+    videos_dir.mkdir(parents=True, exist_ok=True)
 
     launch_kwargs = {
         "user_data_dir": str(profile_dir),
         "headless": headless,
         "user_agent": REAL_USER_AGENT,
+        "record_video_dir": str(videos_dir),
+        "record_video_size": {"width": 1280, "height": 720},
         "args": [
             "--disable-blink-features=AutomationControlled",
             "--no-default-browser-check",
