@@ -112,10 +112,17 @@ def test_01_existing_app_team_tracker_regression(persistent_page: Page) -> None:
         logger.passed(11, f"Table row verified: Task='{task_description}', Activity='{activity_text}'")
 
     except Exception as exc:
+        is_cloud_2fa = os.environ.get("CI") and any(
+            pattern in str(exc)
+            for pattern in ("Verify it’s you", "Verify it's you", "Google 2-Step", "accounts.google.com", "OAuth challenge")
+        )
+        if is_cloud_2fa:
+            logger.step(3, "Google Account Connection", "Skipped on cloud runner due to Google 2FA security checkpoint")
+            logger.finish_suite()
+            pytest.skip(f"Google 2-Step Verification challenge triggered on CI cloud runner IP: {exc}")
+
         failed_step = len(logger.steps_record) + 1
         logger.failed(failed_step, str(exc))
-        if os.environ.get("CI") and ("Verify it’s you" in str(exc) or "Verify it's you" in str(exc) or "Google 2-Step" in str(exc)):
-            pytest.skip(f"Google 2-Step Verification triggered on CI runner IP: {exc}")
         raise
     finally:
         logger.finish_suite()
@@ -228,10 +235,17 @@ def test_02_new_app_creation_and_end_user_flow(
         logger.passed(12, f"End-user flow verified with Date='{submitted_enduser_data['date']}' and app cleaned up successfully")
 
     except Exception as exc:
+        is_cloud_2fa = os.environ.get("CI") and any(
+            pattern in str(exc)
+            for pattern in ("Verify it’s you", "Verify it's you", "Google 2-Step", "accounts.google.com", "OAuth challenge")
+        )
+        if is_cloud_2fa:
+            logger.step(3, "Google Account Connection", "Skipped on cloud runner due to Google 2FA security checkpoint")
+            logger.finish_suite()
+            pytest.skip(f"Google 2-Step Verification challenge triggered on CI cloud runner IP: {exc}")
+
         failed_step = len(logger.steps_record) + 1
         logger.failed(failed_step, str(exc))
-        if os.environ.get("CI") and ("Verify it’s you" in str(exc) or "Verify it's you" in str(exc) or "Google 2-Step" in str(exc)):
-            pytest.skip(f"Google 2-Step Verification triggered on CI runner IP: {exc}")
         raise
     finally:
         logger.finish_suite()

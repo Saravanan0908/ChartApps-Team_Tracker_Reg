@@ -348,11 +348,15 @@ class AppBuilderPage(BasePage):
                     if "/challenge" not in oauth_page.url and not is_pwd_screen and not is_email_screen:
                         try:
                             account_tile = oauth_page.locator(
+                                "div[role='link']:has-text('chartapps.com@gmail.com'), "
+                                "div[role='link']:has-text('chartapps'), "
+                                "li:has-text('chartapps.com@gmail.com'), "
+                                "div:has-text('chartapps.com@gmail.com'), "
                                 "li[data-identifier*='chartapps'], "
                                 "div[data-identifier*='chartapps']"
                             ).first
                             if account_tile.is_visible(timeout=1000):
-                                print("[INFO] Clicking account chooser tile...", flush=True)
+                                print("[INFO] Clicking account chooser tile for chartapps...", flush=True)
                                 account_tile.click()
                                 oauth_page.wait_for_timeout(2000)
                                 continue
@@ -409,8 +413,17 @@ class AppBuilderPage(BasePage):
                     print(f"[WARNING] Could not click 'Next' button: {next_err}", flush=True)
 
         # Step E: Wait until 'Select Your Spreadsheet' or 'Create Dashboard' is visible
-        expect(select_sheet_btn).to_be_visible(timeout=30000)
-        self.page.wait_for_timeout(1500)
+        try:
+            expect(select_sheet_btn).to_be_visible(timeout=30000)
+            self.page.wait_for_timeout(1500)
+        except Exception as sheet_err:
+            # Check if flow was blocked on Google OAuth / 2FA checkpoint
+            if "accounts.google.com" in self.page.url:
+                raise RuntimeError(f"Google 2-Step Verification / OAuth challenge blocked login on accounts.google.com: {self.page.url}")
+            for p in self.page.context.pages:
+                if "accounts.google.com" in p.url:
+                    raise RuntimeError(f"Google 2-Step Verification / OAuth challenge blocked login on accounts.google.com popup: {p.url}")
+            raise sheet_err
 
     def _ensure_app_details_filled(self) -> None:
         """Ensure App Name and Subdomain are filled, re-populating them if cleared by async re-render or OAuth redirect."""

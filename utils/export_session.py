@@ -21,7 +21,7 @@ def export_session() -> None:
         context = p.chromium.launch_persistent_context(
             user_data_dir=str(USER_DATA_DIR),
             channel="chrome",
-            headless=True,
+            headless=False,
         )
         STORAGE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
         context.storage_state(path=str(STORAGE_STATE_PATH))
