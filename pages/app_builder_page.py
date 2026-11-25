@@ -240,7 +240,7 @@ class AppBuilderPage(BasePage):
 
             # Handle Google OAuth on the target oauth_page
             start_oauth = time.time()
-            while (time.time() - start_oauth) < 45:
+            while (time.time() - start_oauth) < 60:
                 if oauth_page.is_closed():
                     print("[INFO] Google OAuth popup closed.", flush=True)
                     break
@@ -251,7 +251,7 @@ class AppBuilderPage(BasePage):
                     break
 
                 if "accounts.google.com" in current_url:
-                    # Check for Google 2-Step Verification / "Verify it's you" security checkpoint
+                    # 1. Check for Google 2-Step Verification / "Verify it's you" security checkpoint
                     try:
                         verify_challenge = oauth_page.locator(
                             "h1:has-text('Verify it’s you'), "
@@ -269,8 +269,6 @@ class AppBuilderPage(BasePage):
                                 "\n" + "=" * 70 + "\n"
                                 "[ERROR] Google 2-Step Verification ('Verify it’s you') triggered!\n"
                                 "Google blocked automated login from cloud runner IP.\n"
-                                "To fix permanently in GitHub Actions:\n"
-                                "Ensure ChartApps user session is restored via AUTH_STORAGE_STATE secret.\n"
                                 + "=" * 70 + "\n"
                             )
                             print(msg, flush=True)
@@ -280,7 +278,49 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # Continue / Allow button on consent screen
+                    # 2. Check for password screen FIRST before any Next button clicks
+                    pwd_input = oauth_page.locator(
+                        "input[type='password'], input[name='Passwd'], input[autocomplete='current-password']"
+                    ).first
+                    is_pwd_screen = False
+                    try:
+                        if pwd_input.is_visible(timeout=1500):
+                            is_pwd_screen = True
+                            print("[INFO] Google Password screen detected: entering password...", flush=True)
+                            pwd_input.click()
+                            pwd_input.fill("")
+                            pwd_input.fill(LoginTestData.PASSWORD)
+                            oauth_page.wait_for_timeout(500)
+                            pwd_next = oauth_page.locator("#passwordNext, button:has-text('Next')").first
+                            pwd_next.click()
+                            print("[INFO] Submitted Google password, waiting for consent screen...", flush=True)
+                            oauth_page.wait_for_timeout(3000)
+                            continue
+                    except Exception as pwd_err:
+                        print(f"[DEBUG] Password screen check error: {pwd_err}", flush=True)
+
+                    # 3. Check for email screen
+                    email_input = oauth_page.locator(
+                        "input[type='email'], input#identifierId, input[name='identifier']"
+                    ).first
+                    is_email_screen = False
+                    try:
+                        if email_input.is_visible(timeout=1000):
+                            is_email_screen = True
+                            print("[INFO] Google Sign-in screen detected: entering email...", flush=True)
+                            email_input.click()
+                            email_input.fill("")
+                            email_input.fill(LoginTestData.EMAIL)
+                            oauth_page.wait_for_timeout(500)
+                            id_next = oauth_page.locator("#identifierNext, button:has-text('Next')").first
+                            id_next.click()
+                            print("[INFO] Submitted Google email, waiting for password screen...", flush=True)
+                            oauth_page.wait_for_timeout(3000)
+                            continue
+                    except Exception as email_err:
+                        print(f"[DEBUG] Email screen check error: {email_err}", flush=True)
+
+                    # 4. Continue / Allow button on consent screen
                     try:
                         cont_btn = oauth_page.locator(
                             "button:has-text('Continue'), "
@@ -304,8 +344,8 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # Account chooser tile (for saved account)
-                    if "/challenge" not in oauth_page.url:
+                    # 5. Account chooser tile (for saved account)
+                    if "/challenge" not in oauth_page.url and not is_pwd_screen and not is_email_screen:
                         try:
                             account_tile = oauth_page.locator(
                                 "li[data-identifier*='chartapps'], "
@@ -319,7 +359,7 @@ class AppBuilderPage(BasePage):
                         except Exception:
                             pass
 
-                    # Consent checkboxes
+                    # 6. Consent checkboxes
                     try:
                         checkboxes = oauth_page.locator("input[type='checkbox']:not(:checked)")
                         if checkboxes.count() > 0:
@@ -331,16 +371,17 @@ class AppBuilderPage(BasePage):
                     except Exception:
                         pass
 
-                    # Next button on consent
+                    # 7. Next button on consent (ONLY when NOT on email or password screen!)
                     try:
-                        next_consent_btn = oauth_page.locator(
-                            "button:has-text('Next'), [role='button']:has-text('Next')"
-                        ).first
-                        if next_consent_btn.is_visible(timeout=1000):
-                            print("[INFO] Clicking 'Next' on Google consent screen...", flush=True)
-                            next_consent_btn.click()
-                            oauth_page.wait_for_timeout(2000)
-                            continue
+                        if not is_email_screen and not is_pwd_screen:
+                            next_consent_btn = oauth_page.locator(
+                                "button:has-text('Next'), [role='button']:has-text('Next')"
+                            ).first
+                            if next_consent_btn.is_visible(timeout=1000):
+                                print("[INFO] Clicking 'Next' on Google consent screen...", flush=True)
+                                next_consent_btn.click()
+                                oauth_page.wait_for_timeout(2000)
+                                continue
                     except Exception:
                         pass
 
